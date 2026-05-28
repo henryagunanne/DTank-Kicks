@@ -1,47 +1,230 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-interface User { id: string; name: string; email: string; role: "customer" | "admin"; }
+interface Address {
+  label?: string;
+  name?: string;
+  line1?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  country?: string;
+  phone?: string;
+}
+
+interface User { 
+  id: string; 
+  name: string; 
+  email: string; 
+  role: "customer" | "admin"; 
+  phone?: string;
+  addresses?: Address[];
+}
+
 interface AuthCtx {
   user: User | null;
+  loading: boolean;
+  accessToken: string | null;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
-const KEY = "solestore_user_v1";
 
-// Demo-only auth that persists locally. Swap with real API calls when backend is hooked up.
+// Key used to persist the access token in sessionStorage
+// sessionStorage clears when the browser tab closes — safer than localStorage
+// We still need to store it somewhere because the httpOnly refresh cookie
+// is only used server-side — the frontend needs the access token for API calls
+const TOKEN_KEY = "dtank_access";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true); // true on first load while we check session
 
+  const [accessToken, setAccessToken] = useState<string | null>(
+    () => {
+      // During server-side rendering `window` and `sessionStorage` are undefined.
+      if (typeof window === "undefined" || !window.sessionStorage) return null;
+      try {
+        return sessionStorage.getItem(TOKEN_KEY);
+      } catch {
+        return null;
+      }
+    }
+  );
+
+
+  // Helper that saves both user and token together
+  const persist = (userData: User, token: string) => {
+    setUser(userData);
+    setAccessToken(token);
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      try {
+        sessionStorage.setItem(TOKEN_KEY, token);
+      } catch {
+        // ignore storage errors
+      }
+    }
+  };
+
+  // Helper to clear user and token on logout
+  const clear = () => {
+    setUser(null);
+    setAccessToken(null);
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      try {
+        sessionStorage.removeItem(TOKEN_KEY);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+
+
+  // On app load, check if user already has a valid session
+  // Your Express server uses httpOnly cookies for refresh tokens
+  // so we ask /api/auth/me to tell us who's logged in
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) setUser(JSON.parse(raw));
-    } catch {}
+    if (typeof window === "undefined" || !window.sessionStorage) {
+      setLoading(false);
+      return;
+    }
+
+    const token = sessionStorage.getItem(TOKEN_KEY);
+
+    if (!token) {
+      // No stored token — user is definitely not logged in
+      setLoading(false);
+      return;
+    }
+
+    fetch("/api/auth/me", { 
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include" 
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+
+          setUser({
+            id: data.user.id || data.user._id,
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role,
+            phone: data.user.phone,
+            addresses: data.user.addresses,
+          });
+
+          setAccessToken(token); // restore token from storage
+        } else {
+          // Token expired or invalid — clear everything
+          clear();
+        }
+      
+      })
+      .catch(() => {
+        // Server not reachable — clear state but don't crash
+        clear();
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  const persist = (u: User | null) => {
-    setUser(u);
-    if (u) localStorage.setItem(KEY, JSON.stringify(u));
-    else localStorage.removeItem(KEY);
-  };
-
   const login: AuthCtx["login"] = async (email, password) => {
-    if (!email || !password) return { ok: false, error: "Enter your email and password." };
-    const isAdmin = email.toLowerCase() === "admin@solestore.com";
-    persist({ id: crypto.randomUUID(), name: isAdmin ? "Admin" : email.split("@")[0], email, role: isAdmin ? "admin" : "customer" });
-    return { ok: true };
-  };
-  const register: AuthCtx["register"] = async (name, email, password) => {
-    if (!name || !email || password.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
-    persist({ id: crypto.randomUUID(), name, email, role: "customer" });
-    return { ok: true };
-  };
-  const logout = () => persist(null);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include", // needed so browser stores the httpOnly refresh cookie
+        body: JSON.stringify({ email, password }),
+      });
 
-  return <Ctx.Provider value={{ user, login, register, logout }}>{children}</Ctx.Provider>;
+      const data = await res.json();
+
+      if (!res.ok) {
+        // Express sends back { error: "..." } or { message: "..." } on failure
+        return { ok: false, error: data.error || data.message || "Login failed" };
+      }
+
+      persist({
+        id: data.user.id || data.user._id,
+        name: data.user.name,
+        email: data.user.email,
+        role: data.user.role,
+        phone: data.user.phone,
+        addresses: data.user.addresses,
+      }, data.access);
+
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Could not reach the server. Is it running?" };
+    }
+  };
+
+  const register: AuthCtx["register"] = async (name, email, password) => {
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { ok: false, error: data.error || data.message || "Registration failed" };
+      }
+
+      // After registering, the server logs you in automatically
+      // and returns the same shape as login
+      persist({
+        id: data.user.id || data.user._id,
+        name: data.user.name,
+        email: data.user.email,
+        role: data.user.role,
+        phone: data.user.phone,
+        addresses: data.user.addresses,
+      }, data.access);
+
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Could not reach the server. Is it running?" };
+    }
+  };
+
+  const logout: AuthCtx["logout"] = async () => {
+    if (typeof window === "undefined" || !window.sessionStorage) {
+      clear();
+      return;
+    }
+
+    const token = sessionStorage.getItem(TOKEN_KEY);
+
+    if (!token) {
+      // No stored token — user is definitely not logged in
+      clear();
+      return;
+    }
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+    } catch {
+      // ignore network errors; still clear local state
+    } finally {
+      clear();
+    }
+  };
+
+  return (
+    <Ctx.Provider value={{ user, loading, accessToken, login, register, logout }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export const useAuth = () => {

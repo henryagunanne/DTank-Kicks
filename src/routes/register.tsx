@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/register")({
   component: RegisterPage,
-  head: () => ({ meta: [{ title: "Create an account — SoleStore" }] }),
+  head: () => ({ meta: [{ title: "Create an account — DTank-Kicks" }] }),
 });
 
 function RegisterPage() {
@@ -28,7 +28,7 @@ function RegisterPage() {
     e.preventDefault();
     if (!validate()) return;
     const res = await register(f.name, f.email, f.password);
-    if (res.ok) { toast.success("Welcome to SoleStore"); nav({ to: "/account" }); }
+    if (res.ok) { toast.success("Welcome to DTank-Kicks"); nav({ to: "/account" }); }
     else toast.error(res.error || "Registration failed");
   };
 

@@ -3,12 +3,17 @@ import { ArrowUp } from "lucide-react";
 
 export function BackToTop() {
   const [show, setShow] = useState(false);
+
+  // Show button when scrolled down 600px. Hide when near top. Adds scroll listener on mount and cleans up on unmount.
   useEffect(() => {
     const on = () => setShow(window.scrollY > 600);
     window.addEventListener("scroll", on);
     return () => window.removeEventListener("scroll", on);
   }, []);
+
+  // Don't render button if not shown to avoid unnecessary DOM elements and event handlers.
   if (!show) return null;
+
   return (
     <button
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}

@@ -1,3 +1,11 @@
+/*
+  This file defines the AccountPage component, which is the main component for the /account route.
+  It displays the user's profile information, order history, wishlist, and security settings.
+  The component uses the useAuth hook to access the current user's information and authentication functions.
+  It also uses useState to manage the active tab and useEffect to handle any side effects related to the user state.
+*/
+
+
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
@@ -8,13 +16,20 @@ import { peso } from "@/lib/format";
 
 export const Route = createFileRoute("/account")({
   component: AccountPage,
-  head: () => ({ meta: [{ title: "My Account — SoleStore" }] }),
+  head: () => ({ meta: [{ title: "My Account — DTank-Kicks" }] }),
 });
 
 function AccountPage() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [tab, setTab] = useState<"profile" | "orders" | "wishlist" | "security">("profile");
+
+  const primaryAddress = user?.addresses?.[0];
+  const formattedAddress = primaryAddress
+    ? [primaryAddress.line1, primaryAddress.city, primaryAddress.province, primaryAddress.country, primaryAddress.postalCode]
+        .filter(Boolean)
+        .join(", ")
+    : "";
 
   useEffect(() => { if (user === null) {/* allow guests to see prompt */} }, [user]);
 
@@ -41,7 +56,7 @@ function AccountPage() {
           <h1 className="text-3xl font-black tracking-tight">Hi, {user.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{user.email} {user.role === "admin" && <Link to="/admin" className="ml-2 rounded bg-gold px-2 py-0.5 text-[10px] font-bold uppercase text-gold-foreground">Admin Panel</Link>}</p>
         </div>
-        <button onClick={() => { logout(); nav({ to: "/" }); }} className="flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm">
+        <button onClick={async () => { await logout(); nav({ to: "/" }); }} className="flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm">
           <LogOut className="h-4 w-4" /> Sign out
         </button>
       </div>
@@ -60,7 +75,18 @@ function AccountPage() {
             {(["name", "email", "phone", "address"] as const).map((k) => (
               <label key={k} className="block">
                 <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{k}</div>
-                <input defaultValue={k === "name" ? user.name : k === "email" ? user.email : ""} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm" />
+                <input
+                  defaultValue={
+                    k === "name"
+                      ? user.name
+                      : k === "email"
+                      ? user.email
+                      : k === "phone"
+                      ? user.phone ?? primaryAddress?.phone ?? ""
+                      : formattedAddress
+                  }
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                />
               </label>
             ))}
             <button type="button" className="w-fit rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground">Save changes</button>

@@ -44,7 +44,7 @@ function LoginPage() {
           Continue with Google
         </button>
         <p className="text-center text-xs text-muted-foreground">No account? <Link to="/register" className="font-semibold text-foreground underline">Register</Link></p>
-        <p className="text-center text-[11px] text-muted-foreground">Try <span className="font-mono">admin@solestore.com</span> for admin demo.</p>
+        
       </form>
     </div>
   );

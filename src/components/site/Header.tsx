@@ -1,9 +1,16 @@
+/*
+  This is the header component for the DTank Kicks website. 
+  It includes the site logo, navigation links, search bar with suggestions, 
+  and icons for user account and shopping cart. The header is responsive, 
+  with a mobile drawer menu on smaller screens. It also supports dark mode toggling.
+*/
+
 import { Link } from "@tanstack/react-router";
 import { Search, ShoppingBag, User, Menu, Moon, Sun, X } from "lucide-react";
 import { useState } from "react";
 import { useCart } from "@/lib/cart-context";
 import { useTheme } from "@/lib/theme-context";
-import { PRODUCTS } from "@/lib/data";
+import { PRODUCTS } from "@/lib/data"; // TODO: Replace with real API data in a real app
 
 export function Header() {
   const { count } = useCart();
@@ -12,6 +19,7 @@ export function Header() {
   const [q, setQ] = useState("");
   const [focused, setFocused] = useState(false);
 
+  // TODO: In a real app, you'd fetch search suggestions from the server based on the query. Here we filter the static PRODUCTS list for simplicity.
   const suggestions = q.length > 1
     ? PRODUCTS.filter((p) => `${p.brand} ${p.name}`.toLowerCase().includes(q.toLowerCase())).slice(0, 5)
     : [];
@@ -22,7 +30,7 @@ export function Header() {
         <button className="md:hidden" onClick={() => setOpen(true)} aria-label="Menu"><Menu className="h-6 w-6" /></button>
 
         <Link to="/" className="text-xl font-extrabold tracking-tight">
-          SOLE<span className="text-gold">STORE</span>
+          DTANK<span className="text-gold">KICKS</span>
         </Link>
 
         <nav className="ml-6 hidden gap-6 text-sm font-medium md:flex">

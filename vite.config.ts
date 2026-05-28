@@ -7,9 +7,16 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   server: {
     port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   resolve: {
-    // Use vite-tsconfig-paths plugin instead of a resolve option
+    // Use vite-tsconfig-paths plugin instead of a resolve option here for better TypeScript path alias support
   },
   plugins: [
     viteTsConfigPaths({

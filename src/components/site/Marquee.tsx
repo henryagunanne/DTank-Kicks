@@ -1,3 +1,10 @@
+/*
+  This component creates a marquee effect that scrolls through a list of popular shoe brands. 
+  The brands are repeated multiple times to create a continuous scrolling effect. 
+  The marquee is styled with a border and background color, and the brand names are displayed in large, 
+  bold text with some spacing between them.
+*/
+
 const BRANDS = ["NIKE", "ADIDAS", "PUMA", "NEW BALANCE", "VANS", "CONVERSE"];
 
 export function BrandMarquee() {

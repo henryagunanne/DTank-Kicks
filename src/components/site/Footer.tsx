@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
+// A simple footer component with site information, navigation links, and a newsletter signup form. 
 export function Footer() {
   return (
     <footer className="mt-24 border-t border-border bg-secondary/40">

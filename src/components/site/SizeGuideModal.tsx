@@ -26,9 +26,14 @@ export function SizeGuideModal({ open, onClose }: { open: boolean; onClose: () =
           <button onClick={onClose} aria-label="Close"><X className="h-5 w-5" /></button>
         </div>
         <table className="w-full text-sm">
-          <thead><tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
-            <th className="py-2">US</th><th>UK</th><th>EU</th><th>CM</th>
-          </tr></thead>
+          <thead>
+            <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+              <th className="py-2">US</th>
+              <th>UK</th>
+              <th>EU</th>
+              <th>CM</th>
+            </tr>
+          </thead>
           <tbody>
             {ROWS.map((r) => <tr key={r[0]} className="border-b border-border/50"><td className="py-2 font-medium">{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td></tr>)}
           </tbody>
