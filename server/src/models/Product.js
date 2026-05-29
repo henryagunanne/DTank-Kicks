@@ -87,4 +87,15 @@ ProductSchema.index({
   brand: "text" 
 });
 
+
+// Customize the JSON output of products to include an "id" field instead of "_id", and remove the "__v" version key.
+ProductSchema.set("toJSON", {
+  virtuals: true,
+  versionKey: false,
+  transform: (_, ret) => {
+    ret.id = ret._id.toString();
+    delete ret._id;
+  },
+});
+
 module.exports = mongoose.model("Product", ProductSchema);

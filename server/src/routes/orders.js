@@ -38,6 +38,19 @@ router.get("/", authenticate, requireAdmin, async (req, res) => {
   res.json(orders);
 });
 
+
+// GET /api/orders/my-orders
+router.get("/my-orders", authenticate, async (req, res) => {
+  const orders = await Order.find({
+    user: req.user.id,
+  })
+    .sort({ createdAt: -1 })
+    .populate("items.product");
+
+  res.json(orders);
+});
+
+
 router.get("/:id", async (req, res) => {
   const order = await Order.findById(req.params.id);
   if (!order) return res.status(404).json({ error: "Not found" });

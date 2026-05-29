@@ -6,7 +6,7 @@ export function Footer() {
     <footer className="mt-24 border-t border-border bg-secondary/40">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-4 lg:px-8">
         <div>
-          <div className="text-xl font-extrabold tracking-tight">SOLE<span className="text-gold">STORE</span></div>
+          <div className="text-xl font-extrabold tracking-tight">DTANK<span className="text-gold">KICKS</span></div>
           <p className="mt-3 text-sm text-muted-foreground max-w-xs">Premium footwear curated for the everyday — from the gym floor to the city street.</p>
         </div>
         <div>

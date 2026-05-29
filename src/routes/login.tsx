@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
-  head: () => ({ meta: [{ title: "Sign in — SoleStore" }] }),
+  head: () => ({ meta: [{ title: "Sign in — DTank Kicks" }] }),
 });
 
 function LoginPage() {

@@ -7,6 +7,7 @@ const SIZES = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 const stockArr = (pattern: number[]) =>
   SIZES.map((s, i) => ({ size: s, stock: pattern[i % pattern.length] }));
 
+// A simple color palette to assign to products based on their category and brand.
 const C = {
   black: { name: "Black", hex: "#111111" },
   white: { name: "White", hex: "#f5f5f5" },
@@ -19,6 +20,8 @@ const C = {
   gold: { name: "Gold", hex: "#d4af37" },
 };
 
+// In a real app, this data would come from a database and be accessed via API calls,
+// but for simplicity we're hardcoding it here. The `fetchProducts` function in `api.ts` simulates fetching this data with filtering, sorting and pagination.
 const photos = [
   "photo-1542291026-7eec264c27ff", // red nike
   "photo-1606107557195-0e29a4b5b4aa", // white sneaker
@@ -46,6 +49,9 @@ const photos = [
   "photo-1512374382149-233c42b6a83b",
 ];
 
+
+// A helper function to generate consistent product data based on an index, category and brand.
+// This allows us to create a diverse catalog of products with different attributes without having to manually specify each one.
 const make = (
   i: number,
   brand: Product["brand"],
@@ -73,6 +79,12 @@ const make = (
   ...opts,
 });
 
+
+// Static product data to power the demo 
+// in a real app this would come from a database and be accessed via API calls, 
+// but for simplicity we're hardcoding it here. 
+// The `fetchProducts` function in `api.ts` simulates fetching this data with filtering, 
+// sorting and pagination.
 export const PRODUCTS: Product[] = [
   make(0, "Nike", "Sneakers", "Air Pulse 270", 7995, [C.black, C.white, C.red]),
   make(1, "Adidas", "Sneakers", "Ultraboost Drift", 9450, [C.white, C.black, C.blue]),
@@ -100,6 +112,8 @@ export const PRODUCTS: Product[] = [
   make(23, "New Balance", "Boots", "Rainier Trail Boot", 10950, [C.brown, C.tan]),
 ];
 
+
+
 export const CATEGORIES = [
   { name: "Sneakers", img: img("photo-1542291026-7eec264c27ff") },
   { name: "Boots", img: img("photo-1605733513597-a8f8341084e6") },
@@ -110,6 +124,8 @@ export const CATEGORIES = [
 
 export const BRANDS = ["Nike", "Adidas", "Puma", "New Balance", "Vans", "Converse"] as const;
 
+
+// Generate some fake reviews for the products. In a real app, these would be stored in the database and fetched via API.
 export const REVIEWS: Review[] = PRODUCTS.flatMap((p, idx) =>
   Array.from({ length: 3 }).map((_, i) => ({
     id: `${p.id}-r-${i}`,
@@ -124,6 +140,7 @@ export const REVIEWS: Review[] = PRODUCTS.flatMap((p, idx) =>
   })),
 );
 
+// A helper function to get a product by ID, used in the product details page. In a real app, you'd fetch this from the server.
 export function getProduct(id: string) {
   return PRODUCTS.find((p) => p.id === id);
 }

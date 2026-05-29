@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { Star, Plus } from "lucide-react";
+import { Star, Plus, Heart } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Product } from "@/lib/types";
 import { peso } from "@/lib/format";
 import { useCart } from "@/lib/cart-context";
+import { useAuth } from "@/lib/auth-context";
+import { useWishlist } from "@/lib/wishlist-context";
 
 export function ProductCard({ product }: { product: Product }) {
   const { add } = useCart();
@@ -67,6 +69,8 @@ export function ProductCard({ product }: { product: Product }) {
   );
 }
 
+
+// A skeleton version of the ProductCard, used as a placeholder while loading real product data
 export function ProductCardSkeleton() {
   return (
     <div className="flex flex-col">
@@ -77,3 +81,44 @@ export function ProductCardSkeleton() {
     </div>
   );
 }
+
+
+// ─── WishlistableCard ─────────────────────────────────────────────────────────
+// Wraps ProductCard with a heart button overlay.
+// Only shows the heart to logged-in users — guests see the plain card.
+export function WishlistableCard({ product }: { product: Product }) {
+  const { user } = useAuth();
+  const { has, toggle } = useWishlist();
+  const wished = has(product.id);
+
+  return (
+    <div className="relative">
+      <ProductCard product={product} />
+
+      {/* Heart overlay — only visible when user is logged in */}
+      {user && (
+        <button
+          onClick={(e) => {
+            // Stop propagation so we don't also navigate to the product page
+            e.preventDefault();
+            e.stopPropagation();
+            toggle(product.id);
+          }}
+          aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
+          className={`absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-all hover:scale-110 ${
+            wished
+              ? "border-red-300 bg-white text-red-500"
+              : "border-border bg-white/80 text-muted-foreground hover:text-red-500 backdrop-blur"
+          }`}
+        >
+          <Heart
+            className="h-4 w-4"
+            fill={wished ? "currentColor" : "none"}
+          />
+        </button>
+      )}
+    </div>
+  );
+}
+
+

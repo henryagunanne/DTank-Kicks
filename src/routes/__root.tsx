@@ -13,6 +13,7 @@ import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 import { CartProvider } from "@/lib/cart-context";
 import { ThemeProvider } from "@/lib/theme-context";
+import { WishlistProvider } from "@/lib/wishlist-context";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
@@ -64,7 +65,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "DTank-Kicks — Premium Footwear" },
-      { name: "description", content: "Premium shoes for sport, street, and everything in between. Free shipping over ₱2,000." },
+      { name: "description", content: "Premium shoes for sport, street, and everything in between." },
       { property: "og:title", content: "DTank-Kicks — Premium Footwear" },
       { property: "og:description", content: "Premium shoes for sport, street, and everything in between." },
       { property: "og:type", content: "website" },
@@ -107,16 +108,18 @@ function RootComponent() {
       <ThemeProvider>
         <AuthProvider>
           <AuthGate>  
-            <CartProvider>
-              <div className="flex min-h-screen flex-col">
-                <Header />
-                <main className="flex-1"><Outlet /></main>
-                <Footer />
-                <BackToTop />
-                <CookieBanner />
-                <Toaster position="top-right" richColors />
-              </div>
-            </CartProvider>
+            <WishlistProvider> 
+              <CartProvider>
+                <div className="flex min-h-screen flex-col">
+                  <Header />
+                  <main className="flex-1"><Outlet /></main>
+                  <Footer />
+                  <BackToTop />
+                  <CookieBanner />
+                  <Toaster position="top-right" richColors />
+                </div>
+              </CartProvider>
+            </WishlistProvider>
           </AuthGate>
         </AuthProvider>
       </ThemeProvider>

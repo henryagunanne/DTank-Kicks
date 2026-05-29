@@ -1,8 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { ProductsResponse } from "@/lib/api";
+import type { Product } from "@/lib/types";
 import { ChevronRight, SlidersHorizontal, X } from "lucide-react";
-import { PRODUCTS, BRANDS } from "@/lib/data";
-import { ProductCard, ProductCardSkeleton } from "@/components/site/ProductCard";
+import { BRANDS } from "@/lib/data";
+import { fetchProducts } from "@/lib/api";
+import { ProductCardSkeleton, WishlistableCard } from "@/components/site/ProductCard";
 
 interface ShopSearch {
   category?: string;
@@ -17,6 +21,7 @@ interface ShopSearch {
 }
 
 export const Route = createFileRoute("/shop")({
+  // Validate and parse search params from the URL into the correct types for our UI and API calls
   validateSearch: (s: Record<string, unknown>): ShopSearch => ({
     category: typeof s.category === "string" ? s.category : undefined,
     brand: typeof s.brand === "string" ? s.brand : undefined,
@@ -31,7 +36,7 @@ export const Route = createFileRoute("/shop")({
   component: ShopPage,
   head: () => ({
     meta: [
-      { title: "Shop All Shoes — SoleStore" },
+      { title: "Shop All Shoes — DTank-Kicks" },
       { name: "description", content: "Browse all shoes from Nike, Adidas, Puma, New Balance, Vans, Converse. Filter by category, brand, size, color and price." },
     ],
   }),
@@ -44,33 +49,30 @@ const PAGE_SIZE = 9;
 function ShopPage() {
   const search = Route.useSearch();
   const nav = Route.useNavigate();
-  const [loading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
+  // When a filter changes, update the URL search params which automatically triggers a refetch with the new filters
   const set = (next: Partial<ShopSearch>) => nav({ search: (prev: ShopSearch) => ({ ...prev, ...next, page: 1 }) });
 
-  const filtered = useMemo(() => {
-    let list = [...PRODUCTS];
-    if (search.category) list = list.filter((p) => p.category === search.category);
-    if (search.brand) list = list.filter((p) => p.brand === search.brand);
-    if (search.color) list = list.filter((p) => p.colors.some((c) => c.name === search.color));
-    if (search.size) list = list.filter((p) => p.sizes.some((s) => s.size === search.size && s.stock > 0));
-    if (search.minPrice) list = list.filter((p) => p.price >= search.minPrice!);
-    if (search.maxPrice) list = list.filter((p) => p.price <= search.maxPrice!);
-    if (search.rating) list = list.filter((p) => p.rating >= search.rating!);
-    switch (search.sort) {
-      case "price-asc": list.sort((a, b) => a.price - b.price); break;
-      case "price-desc": list.sort((a, b) => b.price - a.price); break;
-      case "rated": list.sort((a, b) => b.rating - a.rating); break;
-      case "newest": list.sort((a, b) => (a.isNew === b.isNew ? 0 : a.isNew ? -1 : 1)); break;
-    }
-    return list;
-  }, [search]);
-
+  // The server returns products based on the search params. We use React Query to manage caching and loading states.
   const page = search.page ?? 1;
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const slice = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // Build query params for the server. The backend understands the same filter keys.
+  const queryParams: Record<string, any> = { ...search, page, limit: PAGE_SIZE };
+  
+  
+  const { data: productsRes, isLoading: loading } = useQuery<ProductsResponse, Error>({
+    queryKey: ["products", queryParams],
+    queryFn: () => fetchProducts(queryParams),
+    staleTime: 1000 * 60 * 2,
+  });
+
+  // Extract products and pagination info from the server response, with fallbacks for loading states
+  const products: Product[] = productsRes?.items ?? [];
+  const total = productsRes?.total ?? 0;
+  const totalPages = productsRes?.pages ?? Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // UI for the filters sidebar. On mobile, this is rendered in a drawer when the "Filters" button is clicked.
   const FilterBlock = (
     <aside className="space-y-7 text-sm">
       <div>
@@ -113,9 +115,15 @@ function ShopPage() {
           {ALL_COLORS.map((c) => {
             const hex: Record<string, string> = { Black: "#111", White: "#f5f5f5", Gray: "#9ca3af", Red: "#dc2626", Blue: "#1e40af", Green: "#15803d", Tan: "#b08968", Brown: "#6b3a18", Gold: "#d4af37" };
             return (
-              <button key={c} onClick={() => set({ color: search.color === c ? undefined : c })} title={c}
-                className={`h-7 w-7 rounded-full border-2 ${search.color === c ? "border-gold ring-2 ring-gold/40" : "border-border"}`}
-                style={{ background: hex[c] }} />
+              <button
+                key={c}
+                onClick={() => set({ color: search.color === c ? undefined : c })}
+                title={c}
+                className={`h-7 w-7 rounded-full border-2 p-0 ${search.color === c ? "border-gold ring-2 ring-gold/40" : "border-border"}`}>
+                <svg className="h-7 w-7 rounded-full" viewBox="0 0 24 24" role="img" aria-label={c}>
+                  <circle cx="12" cy="12" r="12" fill={hex[c]} />
+                </svg>
+              </button>
             );
           })}
         </div>
@@ -153,18 +161,17 @@ function ShopPage() {
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight sm:text-4xl">{search.category ?? "All Shoes"}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{filtered.length} products</p>
+          <p className="mt-1 text-sm text-muted-foreground">{total} products</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setShowFilters(true)} className="flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm lg:hidden">
             <SlidersHorizontal className="h-4 w-4" /> Filters
           </button>
-          <select value={search.sort ?? "featured"} onChange={(e) => set({ sort: e.target.value as ShopSearch["sort"] })}
+          <select aria-label="Sort products" value={search.sort} onChange={(e) => set({ sort: e.target.value as ShopSearch["sort"] })}
             className="rounded-full border border-input bg-background px-4 py-2 text-sm">
-            <option value="featured">Featured</option>
+            <option value="newest">Newest</option>
             <option value="price-asc">Price: Low → High</option>
             <option value="price-desc">Price: High → Low</option>
-            <option value="newest">Newest</option>
             <option value="rated">Best Rated</option>
           </select>
         </div>
@@ -177,10 +184,10 @@ function ShopPage() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {loading
               ? Array.from({ length: 9 }).map((_, i) => <ProductCardSkeleton key={i} />)
-              : slice.map((p) => <ProductCard key={p.id} product={p} />)}
+              : products.map((p) => <WishlistableCard key={p.id} product={p} />)}
           </div>
 
-          {filtered.length === 0 && (
+          {total === 0 && (
             <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
               No products match your filters.
             </div>
