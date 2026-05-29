@@ -1,3 +1,9 @@
+/*
+  This file defines the /account route which displays the user's account dashboard. 
+  It includes tabs for profile info, order history, wishlist, and security settings. 
+  The component fetches the user's orders and wishlist items using React Query, 
+  and allows the user to log out or navigate to the admin panel if they have admin privileges.
+*/
 
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";

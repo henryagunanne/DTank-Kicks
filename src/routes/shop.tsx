@@ -1,3 +1,10 @@
+/*
+  This file defines the /shop route which displays a list of products with filtering and sorting options. 
+  It uses React Query to fetch products from the server based on the current search params in the URL, 
+  and updates those params when filters are changed. The UI includes a sidebar for filters 
+  (which becomes a drawer on mobile) and pagination controls.
+*/
+
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";

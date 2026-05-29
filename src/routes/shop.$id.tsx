@@ -1,19 +1,28 @@
+/*
+  This file defines the /shop/$id route which displays the product details page for a specific product. 
+  It uses the loader function to fetch the product data based on the ID in the URL, and renders a detailed view of the product including images, description, reviews, and related products. 
+  The component also allows users to select options like color and size, add the product to their cart, and submit reviews.
+*/
+
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Heart, Minus, Plus, Star, Truck, RotateCcw, ShieldCheck, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { PRODUCTS, REVIEWS, getProduct } from "@/lib/data";
-import type { Product } from "@/lib/types";
+import { fetchProductById, fetchProducts, fetchProductsByIds, fetchReviews } from "@/lib/api";
+import type { Product, Review } from "@/lib/types";
 import { peso } from "@/lib/format";
 import { useCart } from "@/lib/cart-context";
+import { useAuth } from "@/lib/auth-context";
+import { useWishlist } from "@/lib/wishlist-context";
 import { SizeGuideButton } from "@/components/site/SizeGuideModal";
-import { ProductCard } from "@/components/site/ProductCard";
+import { WishlistableCard } from "@/components/site/ProductCard";
 import { pushRecent, useRecent } from "@/lib/recently-viewed";
 import { StarInput } from "@/components/site/StarInput";
 
 export const Route = createFileRoute("/shop/$id")({
-  loader: ({ params }) => {
-    const product = getProduct(params.id);
+  loader: async ({ params }) => {
+    const product = await fetchProductById(params.id);
     if (!product) throw notFound();
     return { product };
   },
@@ -21,31 +30,56 @@ export const Route = createFileRoute("/shop/$id")({
   head: ({ loaderData }) => ({
     meta: loaderData
       ? [
-          { title: `${loaderData.product.brand} ${loaderData.product.name} — SoleStore` },
+          { title: `${loaderData.product.brand} ${loaderData.product.name} — DTank-Kicks` },
           { name: "description", content: loaderData.product.description.slice(0, 155) },
           { property: "og:title", content: `${loaderData.product.brand} ${loaderData.product.name}` },
           { property: "og:image", content: loaderData.product.images[0] },
         ]
-      : [{ title: "Product — SoleStore" }],
+      : [{ title: "Product — DTank-Kicks" }],
   }),
 });
 
 function ProductPage() {
   const { product } = Route.useLoaderData() as { product: Product };
   const { add } = useCart();
+  const { user } = useAuth();
+  const { has, toggle } = useWishlist();
   const [imageIdx, setImageIdx] = useState(0);
   const [color, setColor] = useState(product.colors[0].name);
   const [size, setSize] = useState<number | null>(null);
   const [qty, setQty] = useState(1);
   const [tab, setTab] = useState<"desc" | "size" | "ship" | "rev">("desc");
-  const [wished, setWished] = useState(false);
 
   useEffect(() => { pushRecent(product); }, [product]);
 
-  const reviews = REVIEWS.filter((r) => r.productId === product.id);
-  const related = PRODUCTS.filter((p) => p.id !== product.id && p.category === product.category).slice(0, 4);
+  // Fetch reviews for this product. We show the first 10 reviews here and link to a separate reviews page if there are more.
+  const { data: reviewData } = useQuery<{ items: Review[]; total: number; page: number; pages: number }, Error>({
+    queryKey: ["product-reviews", product.id],
+    queryFn: () => fetchReviews(product.id, 1, 10),
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const reviews = reviewData?.items ?? [];
+  const reviewTotal = reviewData?.total ?? product.reviewCount;
+
+  const { data: relatedData = { items: [] } } = useQuery({
+    queryKey: ["related-products", product.category],
+    queryFn: () => fetchProducts({ category: product.category, limit: 8, sort: "newest" }),
+    enabled: !!product.category,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const related = relatedData.items.filter((p) => p.id !== product.id).slice(0, 4);
+
   const recentIds = useRecent().filter((id) => id !== product.id);
-  const recent = useMemo(() => recentIds.map((id) => PRODUCTS.find((p) => p.id === id)!).filter(Boolean).slice(0, 4), [recentIds]);
+  const { data: recent = [] } = useQuery({
+    queryKey: ["recent-products", recentIds],
+    queryFn: () => fetchProductsByIds(recentIds),
+    enabled: recentIds.length > 0,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const wished = user ? has(product.id) : false;
 
   const onAdd = () => {
     if (!size) { toast.error("Please select a size"); return; }
@@ -71,9 +105,9 @@ function ProductPage() {
           </div>
           <div className="mt-4 grid grid-cols-4 gap-3">
             {product.images.map((src, i) => (
-              <button key={i} onClick={() => setImageIdx(i)}
+              <button key={i} aria-label={`View image ${i + 1}`} onClick={() => setImageIdx(i)}
                 className={`aspect-square overflow-hidden rounded-lg border-2 ${imageIdx === i ? "border-gold" : "border-transparent"}`}>
-                <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+                <img src={src} alt={`Thumbnail ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
               </button>
             ))}
           </div>
@@ -99,9 +133,12 @@ function ProductPage() {
             <div className="mb-2 text-xs font-bold uppercase tracking-widest">Color: <span className="text-muted-foreground">{color}</span></div>
             <div className="flex gap-2">
               {product.colors.map((c) => (
-                <button key={c.name} title={c.name} onClick={() => setColor(c.name)}
-                  className={`h-9 w-9 rounded-full border-2 ${color === c.name ? "border-gold ring-2 ring-gold/40" : "border-border"}`}
-                  style={{ background: c.hex }} />
+                <button key={c.name} title={c.name} aria-label={`Select ${c.name}`} onClick={() => setColor(c.name)}
+                  className={`h-9 w-9 rounded-full border-2 p-0 ${color === c.name ? "border-gold ring-2 ring-gold/40" : "border-border"}`}>
+                  <svg className="h-9 w-9 rounded-full" viewBox="0 0 24 24" role="img" aria-label={c.name}>
+                    <circle cx="12" cy="12" r="12" fill={c.hex} />
+                  </svg>
+                </button>
               ))}
             </div>
           </div>
@@ -129,17 +166,19 @@ function ProductPage() {
 
           <div className="mt-7 flex items-center gap-3">
             <div className="flex items-center rounded-full border border-border">
-              <button onClick={() => setQty(Math.max(1, qty - 1))} className="p-3"><Minus className="h-4 w-4" /></button>
+              <button onClick={() => setQty(Math.max(1, qty - 1))} aria-label="Decrease quantity" className="p-3"><Minus className="h-4 w-4" /></button>
               <span className="w-10 text-center text-sm font-bold">{qty}</span>
-              <button onClick={() => setQty(qty + 1)} className="p-3"><Plus className="h-4 w-4" /></button>
+              <button onClick={() => setQty(qty + 1)} aria-label="Increase quantity" className="p-3"><Plus className="h-4 w-4" /></button>
             </div>
             <button onClick={onAdd} className="flex-1 rounded-full bg-primary py-3.5 text-sm font-bold uppercase tracking-wider text-primary-foreground hover:bg-primary/90">
               Add to Cart
             </button>
-            <button onClick={() => { setWished(!wished); toast.success(wished ? "Removed from wishlist" : "Added to wishlist"); }}
-              className={`rounded-full border border-border p-3.5 ${wished ? "bg-destructive/10 text-destructive border-destructive/40" : ""}`}>
-              <Heart className={`h-5 w-5 ${wished ? "fill-current" : ""}`} />
-            </button>
+            {user && (
+              <button aria-label={wished ? "Remove from wishlist" : "Add to wishlist"} onClick={() => { toggle(product.id); toast.success(wished ? "Removed from wishlist" : "Added to wishlist"); }}
+                className={`rounded-full border border-border p-3.5 ${wished ? "bg-destructive/10 text-destructive border-destructive/40" : ""}`}>
+                <Heart className={`h-5 w-5 ${wished ? "fill-current" : ""}`} />
+              </button>
+            )}
           </div>
 
           <div className="mt-8 grid grid-cols-3 gap-4 rounded-xl border border-border p-4 text-xs">
@@ -153,7 +192,7 @@ function ProductPage() {
       {/* Tabs */}
       <div className="mt-20 border-t border-border">
         <div className="flex flex-wrap gap-1 border-b border-border">
-          {([["desc", "Description"], ["size", "Size & Fit"], ["ship", "Delivery & Returns"], ["rev", `Reviews (${reviews.length})`]] as const).map(([k, l]) => (
+          {([["desc", "Description"], ["size", "Size & Fit"], ["ship", "Delivery & Returns"], ["rev", `Reviews (${reviewTotal})`]] as const).map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)}
               className={`border-b-2 px-5 py-4 text-sm font-semibold ${tab === k ? "border-gold text-foreground" : "border-transparent text-muted-foreground"}`}>
               {l}
@@ -190,7 +229,7 @@ function ProductPage() {
       <section className="mt-16">
         <h2 className="mb-8 text-2xl font-black tracking-tight">You might also like</h2>
         <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-          {related.map((p) => <ProductCard key={p.id} product={p} />)}
+          {related.map((p) => <WishlistableCard key={p.id} product={p} />)}
         </div>
       </section>
 
@@ -198,7 +237,7 @@ function ProductPage() {
         <section className="mt-16">
           <h2 className="mb-8 text-2xl font-black tracking-tight">Recently viewed</h2>
           <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-            {recent.map((p) => <ProductCard key={p.id} product={p} />)}
+            {recent.map((p) => <WishlistableCard key={p.id} product={p} />)}
           </div>
         </section>
       )}
@@ -220,7 +259,7 @@ function ReviewForm({ productId }: { productId: string }) {
       <div className="mt-3"><StarInput value={rating} onChange={setRating} /></div>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" required maxLength={100} className="mt-3 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" />
       <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Your review..." required maxLength={1000} rows={4} className="mt-2 w-full rounded-md border border-input bg-background p-3 text-sm" />
-      <input type="file" accept="image/*" className="mt-2 text-xs" />
+      <input type="file" accept="image/*" aria-label="Upload review image" className="mt-2 text-xs" />
       <button className="mt-3 rounded-full bg-primary px-5 py-2 text-xs font-bold uppercase text-primary-foreground" data-product={productId}>Submit Review</button>
     </form>
   );

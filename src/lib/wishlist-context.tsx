@@ -42,13 +42,14 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     enabled: !!user,
   });
 
+  // Create a Set of wishlist product IDs for O(1) lookup
   const ids = useMemo(
     () => new Set(data.map((p) => p.id)),
     [data]
   );
 
   const mutation = useMutation<void, unknown, string, { previous: WishlistItem[] }>({
-      mutationFn: (productId: string) => toggleWishlist(productId, true, accessToken ?? undefined),
+      mutationFn: (productId: string) => toggleWishlist(productId, accessToken ?? undefined),
   
       onMutate: async (productId: string) => {
         await queryClient.cancelQueries({

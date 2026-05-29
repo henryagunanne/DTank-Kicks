@@ -4,6 +4,7 @@ const connectDB = require("./config/db");
 const User = require("./models/User");
 const Product = require("./models/Product");
 const Order = require("./models/Order");
+const Review = require("./models/Review");
 
 const img = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=80`;
 const SIZES = [4,5,6,7,8,9,10,11,12,13,14,15];
@@ -45,7 +46,7 @@ const products = [
 
 async function run() {
   await connectDB();
-  await Promise.all([User.deleteMany({}), Product.deleteMany({}), Order.deleteMany({})]);
+  await Promise.all([User.deleteMany({}), Product.deleteMany({}), Order.deleteMany({}), Review.deleteMany({})]);
 
   const adminHash = await bcrypt.hash("Admin1234!", 12);
   const customerHash = await bcrypt.hash("Customer1234!", 12);
@@ -63,14 +64,14 @@ async function run() {
     tags: [category.toLowerCase(), brand.toLowerCase()],
   })));
 
-  await Order.create({
+  const order1 = await Order.create({
     user: c1._id,
     items: [{ product: created[0]._id, name: created[0].name, brand: created[0].brand, image: created[0].images[0], size: 9, color: "Black", quantity: 1, price: created[0].price }],
     shippingAddress: { name: c1.name, line1: "123 Bonifacio Ave", city: "Taguig", province: "Metro Manila", postalCode: "1630", country: "Philippines", phone: c1.phone },
     deliveryMethod: "standard", paymentStatus: "paid", fulfillmentStatus: "delivered",
     subtotal: created[0].price, shipping: 0, tax: Math.round(created[0].price * 0.12), total: created[0].price + Math.round(created[0].price * 0.12),
   });
-  await Order.create({
+  const order2 = await Order.create({
     user: c2._id,
     items: [{ product: created[5]._id, name: created[5].name, brand: created[5].brand, image: created[5].images[0], size: 7, color: "White", quantity: 2, price: created[5].price }],
     shippingAddress: { name: c2.name, line1: "456 Quezon Blvd", city: "Quezon City", province: "Metro Manila", postalCode: "1100", country: "Philippines", phone: c2.phone },
@@ -79,7 +80,56 @@ async function run() {
     trackingNumber: "LBC987654321", carrier: "LBC Express",
   });
 
-  console.log(`✅ Seed complete: 1 admin, 2 customers, ${created.length} products, 2 orders`);
+  // Reviews from customers for products they purchased (verified)
+  const reviewsData = [
+    {
+      product: created[0]._id, user: c1._id, rating: 5,
+      title: "Best daily sneaker I've owned",
+      body: "Fits true to size and feels broken-in from day one. Cushioning is unreal for long city walks. Already eyeing another colorway.",
+      verifiedPurchase: true,
+    },
+    {
+      product: created[0]._id, user: c2._id, rating: 4,
+      title: "Stylish and comfortable",
+      body: "Looks even better in person. Took half a day to break in, but now they're my go-to pair. Knocking one star for the laces feeling a bit cheap.",
+      verifiedPurchase: false,
+    },
+    {
+      product: created[5]._id, user: c2._id, rating: 5,
+      title: "Classic Chucks, perfectly done",
+      body: "The Hi version sits great on the ankle and the canvas feels premium. Pairs with everything in my closet. Bought two and gifted one.",
+      verifiedPurchase: true,
+    },
+    {
+      product: created[5]._id, user: c1._id, rating: 4,
+      title: "Solid build, runs slightly large",
+      body: "Quality stitching and durable sole. I'd recommend going half a size down if you're between sizes. Otherwise a great pickup.",
+      verifiedPurchase: false,
+    },
+    {
+      product: created[1]._id, user: c1._id, rating: 5,
+      title: "Boost is addictive",
+      body: "Incredibly responsive on runs and casual enough for jeans. Worth every peso.",
+      verifiedPurchase: false,
+    },
+    {
+      product: created[3]._id, user: c2._id, rating: 4,
+      title: "Heritage feel, modern comfort",
+      body: "The 990v6 lives up to the hype. Suede is plush and the midsole soaks up impact nicely. Slightly heavy but I don't mind.",
+      verifiedPurchase: false,
+    },
+  ];
+  const insertedReviews = await Review.insertMany(reviewsData);
+
+  // Recompute product rating + reviewCount from inserted reviews
+  const productIds = [...new Set(insertedReviews.map((r) => String(r.product)))];
+  for (const pid of productIds) {
+    const productReviews = insertedReviews.filter((r) => String(r.product) === pid);
+    const avg = productReviews.reduce((s, r) => s + r.rating, 0) / productReviews.length;
+    await Product.findByIdAndUpdate(pid, { rating: avg, reviewCount: productReviews.length });
+  }
+
+  console.log(`✅ Seed complete: 1 admin, 2 customers, ${created.length} products, 2 orders, ${insertedReviews.length} reviews`);
   process.exit(0);
 }
 run().catch((e) => { console.error(e); process.exit(1); });

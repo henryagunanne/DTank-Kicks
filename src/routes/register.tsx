@@ -1,3 +1,9 @@
+/*
+  This file defines the /login route which displays a login form for users to sign in. 
+  It uses local component state to manage form inputs and loading state, and calls the login function from the auth context when the form is submitted. 
+  On successful login, it shows a success toast and navigates to the account page; on failure, it shows an error toast.
+*/
+
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";

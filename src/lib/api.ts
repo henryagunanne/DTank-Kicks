@@ -7,12 +7,19 @@
 // Every function throws on network failure so TanStack Query's
 // isError state gets triggered correctly.
 
-import type { Product } from "./types";
+import type { Product, Review } from "./types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ProductsResponse {
   items: Product[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+export interface ReviewsResponse {
+  items: Review[];
   total: number;
   page: number;
   pages: number;
@@ -87,6 +94,16 @@ export async function fetchProductsByBrand(
   return data.items;
 }
 
+// Fetch reviews for a product with pagination — used on the product details page and reviews page
+export async function fetchReviews(productId: string, page = 1, limit = 10): Promise<ReviewsResponse> {
+  const query = new URLSearchParams();
+  query.set("page", String(page));
+  query.set("limit", String(limit));
+
+  const res = await fetch(`/api/products/${productId}/reviews?${query}`);
+  if (!res.ok) throw new Error("Failed to fetch reviews");
+  return res.json();
+}
 
 // ─── Wishlist ─────────────────────────────────────────────────────────────────
 // Fetch the user's wishlist items — returns full product objects, not just IDs
@@ -96,35 +113,39 @@ export async function fetchWishlist(token?: string): Promise<Product[]> {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch("/api/wishlist", { 
+  const res = await fetch("/api/wishlist", {
     credentials: "include",
     headers,
-  }); 
-  
-  if (!res.ok) { 
-    throw new Error("Failed to fetch wishlist"); 
-  } 
-  return res.json(); 
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch wishlist");
+  }
+
+  return res.json();
 }
 
-// Add or remove an item from the wishlist depending on the "add" flag
-export async function toggleWishlist(productId: string, add = true, token?: string): Promise<void> {
-  const method = add ? "POST" : "DELETE";
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+export async function toggleWishlist( productId: string, token?: string): Promise<void> {
+  const headers: Record<string, string> = {};
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`/api/wishlist/${productId}`, {
-    method,
-    headers,
-    credentials: "include",
-  });
+  const res = await fetch(
+    `/api/wishlist/toggle/${productId}`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers,
+    }
+  );
+
   if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(errorData.message || "Failed to update wishlist");
+    throw new Error("Failed to update wishlist");
   }
-} 
+
+  return res.json();
+}
 
 
 
