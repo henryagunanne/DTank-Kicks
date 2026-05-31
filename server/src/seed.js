@@ -8,7 +8,11 @@ const Review = require("./models/Review");
 
 const img = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=80`;
 const SIZES = [4,5,6,7,8,9,10,11,12,13,14,15];
-const stockArr = (pat) => SIZES.map((s, i) => ({ size: s, stock: pat[i % pat.length] }));
+const STOCK_PATTERN = [3, 5, 8, 6, 4, 0, 7, 5];
+const variantArr = (colors, pat = STOCK_PATTERN) =>
+  colors.flatMap((color) =>
+    SIZES.map((size, i) => ({ size, color, stock: pat[i % pat.length] }))
+  );
 const C = {
   black: { name: "Black", hex: "#111111" }, white: { name: "White", hex: "#f5f5f5" },
   gray: { name: "Gray", hex: "#9ca3af" }, red: { name: "Red", hex: "#dc2626" },
@@ -53,14 +57,15 @@ async function run() {
   const admin = await User.create({ name: "Admin", email: "admin@dtank-kicks.com", passwordHash: adminHash, role: "admin" });
   const c1 = await User.create({ name: "Marco Santos", email: "marco@example.com", passwordHash: customerHash, phone: "+639171234567" });
   const c2 = await User.create({ name: "Jenny Lopez", email: "jen@example.com", passwordHash: customerHash, phone: "+639179876543" });
+  const c3 = await User.create({ name: "Maria Lopez", email: "maria@example.com", passwordHash: customerHash, phone: "+639179876857" });
 
   const created = await Product.insertMany(products.map(([brand, category, name, price, colors], i) => ({
     name, brand, category, price,
     compareAtPrice: i % 4 === 0 ? Math.round(price * 1.25) : undefined,
     description: "Premium engineered upper, cushioned midsole, durable rubber outsole.",
     images: [img(photos[i % photos.length]), img(photos[(i + 3) % photos.length]), img(photos[(i + 7) % photos.length])],
-    sizes: stockArr([3, 5, 8, 6, 4, 0, 7, 5]),
-    colors, rating: 3.8 + ((i * 13) % 12) / 10, reviewCount: 12 + (i * 7) % 240,
+    variants: variantArr(colors),
+    rating: 3.8 + ((i * 13) % 12) / 10, reviewCount: 12 + (i * 7) % 240,
     tags: [category.toLowerCase(), brand.toLowerCase()],
   })));
 

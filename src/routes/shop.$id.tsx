@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Heart, Minus, Plus, Star, Truck, RotateCcw, ShieldCheck, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { fetchProductById, fetchProducts, fetchProductsByIds, fetchReviews, createReview, type CreateReviewInput } from "@/lib/api";
+import { fetchProductById, fetchProducts, fetchProductsByIds, fetchReviews, createReview } from "@/lib/product-api";
 import type { Product, Review } from "@/lib/types";
 import { peso } from "@/lib/format";
 import { useCart } from "@/lib/cart-context";
@@ -312,10 +312,7 @@ function ProductPage() {
               )}
               </div>
 
-              {/* If the user is logged in, we show the review submission form below the list of reviews. */}
-              {user && (
-                <ReviewForm productId={product.id} />
-              )}
+              <ReviewForm productId={product.id} />
             </div>
             )}
           </div>
@@ -398,12 +395,9 @@ function ReviewForm({ productId }: { productId: string }) {
   };
   
   return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-xl border border-border p-5"
-    >
+    <form onSubmit={onSubmit} className="rounded-xl border border-border p-5">
       <h3 className="text-sm font-bold text-foreground">Write a review</h3>
-      <div className="mt-3 text-xs text-muted-foreground">Only verified buyers can submit reviews.</div>
+      <div className="mt-3 text-xs text-muted-foreground">Hover to rate`</div>
       <div className="mt-3"><StarInput value={rating} onChange={setRating} /></div>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" required maxLength={100} className="mt-3 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" />
       <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Your review..." required maxLength={1000} rows={4} className="mt-2 w-full rounded-md border border-input bg-background p-3 text-sm" />

@@ -10,7 +10,7 @@ const { validate } = require("../middleware/error");
 
 const upload = multer({
   storage: multer.diskStorage({
-    destination: path.join(__dirname, "..", "..", "uploads"),
+    destination: path.join(__dirname, "..", "..", "uploads/reviews"),
     filename: (_req, file, cb) => cb(null, Date.now() + "-" + file.originalname.replace(/\s+/g, "_")),
   }),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -26,6 +26,8 @@ router.get("/:id/reviews", async (req, res) => {
   res.json({ items, total, page, pages: Math.ceil(total / limit) });
 });
 
+
+// POST /api/products/:id/reviews - allows an authenticated user to submit a review for a product. The user can only review a product if they have purchased it (verified by checking orders). The review includes a rating, title, body, and optional images. After submitting a review, the product's average rating should be recalculated.
 router.post("/:id/reviews",
   authenticate, upload.array("images", 4),
   body("rating").isInt({ min: 1, max: 5 }),
@@ -34,7 +36,7 @@ router.post("/:id/reviews",
   validate,
   async (req, res) => {
     const verified = !!(await Order.findOne({ user: req.user._id, "items.product": req.params.id }));
-    const images = (req.files || []).map((f) => `/uploads/${f.filename}`);
+    const images = (req.files || []).map((f) => `/uploads/reviews/${f.filename}`);
     const review = await Review.create({
       product: req.params.id, 
       user: req.user._id,

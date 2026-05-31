@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, typ
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CartItem } from "./types";
 import { useAuth } from "./auth-context";
-import { addOrUpdateItem, fetchCart, mergeCart, removeItem, type ServerCart } from "./api";
+import { addOrUpdateItem, fetchCart, mergeCart, removeItem,  type ServerCart} from "./cart-api";
 
 interface CartCtx {
   items: CartItem[];

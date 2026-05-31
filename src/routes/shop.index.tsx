@@ -8,11 +8,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ProductsResponse } from "@/lib/api";
+import type { ProductsResponse } from "@/lib/product-api";
 import type { Product } from "@/lib/types";
 import { ChevronRight, SlidersHorizontal, X } from "lucide-react";
 import { BRANDS } from "@/lib/data";
-import { fetchProducts } from "@/lib/api";
+import { fetchProducts } from "@/lib/product-api";
 import { ProductCardSkeleton, WishlistableCard } from "@/components/site/ProductCard";
 
 interface ShopSearch {

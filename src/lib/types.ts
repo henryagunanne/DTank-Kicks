@@ -3,6 +3,7 @@ export type Brand = "Nike" | "Adidas" | "Puma" | "New Balance" | "Vans" | "Conve
 
 export interface SizeStock { size: number; stock: number; }
 export interface Color { name: string; hex: string; }
+export interface Variant { size: number; color: Color; stock: number; }
 
 export interface Product {
   id: string;
@@ -13,6 +14,7 @@ export interface Product {
   price: number;
   compareAtPrice?: number;
   images: string[];
+  variants: Variant[];
   sizes: SizeStock[];
   colors: Color[];
   rating: number;
@@ -44,3 +46,4 @@ export interface Review {
   verifiedPurchase: boolean;
   createdAt: string;
 }
+

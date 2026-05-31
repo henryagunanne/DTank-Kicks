@@ -33,7 +33,7 @@ export const Route = createFileRoute("/account")({
 });
 
 function AccountPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, accessToken } = useAuth();
   const nav = Route.useNavigate();
   const search = Route.useSearch();
   const [tab, setTab] = useState<"profile" | "orders" | "wishlist" | "security">(
@@ -64,7 +64,7 @@ function AccountPage() {
     isLoading: wishlistLoading,
   } = useQuery({
     queryKey: ["wishlist"],
-    queryFn: () => fetchWishlist(),
+    queryFn: () => fetchWishlist(accessToken || ""),
     enabled: !!user,
   });
 
@@ -77,7 +77,7 @@ function AccountPage() {
     isLoading: ordersLoading,
   } = useQuery({
     queryKey: ["orders"],
-    queryFn: () => fetchOrders(),
+    queryFn: () => fetchOrders(accessToken || ""),
     enabled: !!user,
   });
 

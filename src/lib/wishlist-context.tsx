@@ -7,7 +7,7 @@ import {
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { fetchWishlist, toggleWishlist } from "./api";
+import { fetchWishlist, toggleWishlist } from "./product-api";
 import { useAuth } from "./auth-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
 
   const { data = [], isLoading } = useQuery<WishlistItem[]>({
     queryKey: ["wishlist"],
-    queryFn: () => fetchWishlist(accessToken ?? undefined),
+    queryFn: () => fetchWishlist(accessToken ?? ""),
     enabled: !!user,
   });
 

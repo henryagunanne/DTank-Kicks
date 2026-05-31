@@ -11,23 +11,24 @@ The schema also includes timestamps for tracking when products are created and u
 
 const mongoose = require("mongoose");
 
-const SizeStockSchema = new mongoose.Schema({
-  size: {
-    type: Number,
-  },
-  stock: {
-    type: Number,
-  },
-}, { _id: false });
+const VariantSchema = new mongoose.Schema(
+  {
+    size: {
+      type: Number,
+      required: true,
+    },
 
-const ColorSchema = new mongoose.Schema({
-  name: {
-    type: String,
-  },
-  hex: {
-    type: String,
-  },
-}, { _id: false });
+    color: {
+      name: String,
+      hex: String,
+    },
+
+    stock: {
+      type: Number,
+      default: 0,
+    },
+  }, { _id: false });
+
 
 const ProductSchema = new mongoose.Schema({
   name: {
@@ -62,11 +63,9 @@ const ProductSchema = new mongoose.Schema({
   images: {
     type: [String],
   },
-  sizes: {
-    type: [SizeStockSchema],
-  },
-  colors: {
-    type: [ColorSchema],
+  variants: {
+    type: [VariantSchema],
+    default: [],
   },
   rating: {
     type: Number,

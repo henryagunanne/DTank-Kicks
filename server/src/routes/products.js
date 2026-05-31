@@ -20,7 +20,7 @@ const { validate } = require("../middleware/error");
 // Configure Multer for image uploads
 const upload = multer({
   storage: multer.diskStorage({
-    destination: path.join(__dirname, "..", "..", "uploads"),
+    destination: path.join(__dirname, "..", "..", "uploads/products"),
     filename: (_req, file, cb) => cb(null, Date.now() + "-" + file.originalname.replace(/\s+/g, "_")),
   }),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -79,7 +79,7 @@ router.post("/", authenticate, requireAdmin, upload.array("images", 6),
   validate,
   async (req, res) => {
 
-    const images = (req.files || []).map((f) => `/uploads/${f.filename}`);
+    const images = (req.files || []).map((f) => `/uploads/products/${f.filename}`);
     const product = await Product.create({ ...req.body, images, sizes: JSON.parse(req.body.sizes || "[]"), colors: JSON.parse(req.body.colors || "[]") });
     res.status(201).json(product);
   }
