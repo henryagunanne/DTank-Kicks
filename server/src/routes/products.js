@@ -38,13 +38,44 @@ router.get("/",
     const filter = {};
     if (category) filter.category = category;
     if (brand) filter.brand = brand;
-    if (color) filter["colors.name"] = color;
-    if (size) filter["sizes"] = { $elemMatch: { size: Number(size), stock: { $gt: 0 } } };
-    if (minPrice || maxPrice) filter.price = { ...(minPrice && { $gte: Number(minPrice) }), ...(maxPrice && { $lte: Number(maxPrice) }) };
+    // Variant-based filters
+    if (size && color) {
+      filter.variants = { $elemMatch: { size: Number(size), "color.name": color, stock: { $gt: 0 } } };
+    } else if (size) {
+      filter.variants = { $elemMatch: { size: Number(size), stock: { $gt: 0 } } };
+    } else if (color) {
+      filter["variants.color.name"] = color;
+    }
+
+    // Price range filter on variants
+    if (minPrice || maxPrice) {
+      filter.variants = {
+        ...(filter.variants || {}),
+        $elemMatch: {
+          ...(size && { size: Number(size) }),
+          ...(color && { "color.name": color }),
+
+          ...(minPrice && {
+            price: { $gte: Number(minPrice) }
+          }),
+
+          ...(maxPrice && {
+            price: {
+              ...(minPrice
+                ? { $gte: Number(minPrice) }
+                : {}),
+              $lte: Number(maxPrice)
+            }
+          })
+        }
+      };
+    }
+    
     if (rating) filter.rating = { $gte: Number(rating) };
     if (q) filter.$text = { $search: q };
 
-    const sortMap = { "price-asc": { price: 1 }, "price-desc": { price: -1 }, newest: { createdAt: -1 }, rated: { rating: -1 } };
+    // Sorting
+    const sortMap = { "price-asc": { variants: { $elemMatch: { price: 1 } } }, "price-desc": { variants: { $elemMatch: { price: -1 } } }, newest: { createdAt: -1 }, rated: { rating: -1 } };
     const sortBy = sortMap[sort] || { createdAt: -1 };
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -70,27 +101,96 @@ router.get("/:id", async (req, res) => {
   res.json(p);
 });
 
+
 // POST /api/products` - creates a new product. Admin only. Accepts multipart/form-data with fields for name, brand, category, description, price, sizes (JSON array), colors (JSON array), and images (up to 6 files).
 router.post("/", authenticate, requireAdmin, upload.array("images", 6),
   body("name").trim().isLength({ min: 1, max: 200 }),
   body("brand").isString(),
   body("category").isIn(["Sneakers", "Boots", "Formal", "Sports", "Sandals"]),
-  body("price").isFloat({ min: 0 }),
+  body("description").trim().isLength({ min: 1, max: 2000 }),
+  body("variants").custom((value) => {
+    if (!value) return true;
+    let variants;
+    try {
+      variants = JSON.parse(value);
+    } catch {
+      throw new Error("Variants must be a valid JSON array");
+    }
+    if (!Array.isArray(variants)) throw new Error("Variants must be an array");
+    for (const v of variants) {
+      if (typeof v.size !== "number" || v.size <= 0) throw new Error("Variant size must be a positive number");
+      if (!v.color) { throw new Error("Variant color is required");}
+      if (typeof v.color.name !== "string" || !v.color.name.trim()) throw new Error("Variant colorName is required");
+      if (typeof v.color.hex !== "string" || !/^#([0-9A-F]{3}){1,2}$/i.test(v.color.hex)) throw new Error("Variant colorHex must be a valid hex color");
+      if (typeof v.price !== "number" || v.price < 0) throw new Error("Variant price must be a non-negative number");
+      if (v.compareAtPrice !== undefined && (typeof v.compareAtPrice !== "number" || v.compareAtPrice < 0)) throw new Error("Variant compareAtPrice must be a non-negative number");
+      if (typeof v.stock !== "number" || v.stock < 0) throw new Error("Variant stock must be a non-negative number");
+    }
+    return true;
+  }),
+  body("tags").optional().isString(),
   validate,
   async (req, res) => {
 
     const images = (req.files || []).map((f) => `/uploads/products/${f.filename}`);
-    const product = await Product.create({ ...req.body, images, sizes: JSON.parse(req.body.sizes || "[]"), colors: JSON.parse(req.body.colors || "[]") });
+    const variants = req.body.variants ? JSON.parse(req.body.variants) : [];
+    const tags = req.body.tags ? req.body.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
+    const product = await Product.create({
+      name: req.body.name,
+      brand: req.body.brand,
+      category: req.body.category,
+      description: req.body.description || "",
+      images,
+      tags,
+      variants,
+    });
     res.status(201).json(product);
   }
 );
 
 // PUT /api/products/:id` - updates an existing product by its ID. Admin only. Accepts multipart/form-data with fields for name, brand, category, description, price, sizes (JSON array), colors (JSON array), and images (up to 6 files).
-router.put("/:id", authenticate, requireAdmin, async (req, res) => {
-  const product = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  if (!product) return res.status(404).json({ error: "Not found" });
-  res.json(product);
-});
+router.put("/:id", authenticate, requireAdmin, upload.array("images", 6),
+  body("name").optional().trim().isLength({ min: 1, max: 200 }),
+  body("brand").optional().isString(),
+  body("category").optional().isIn(["Sneakers", "Boots", "Formal", "Sports", "Sandals"]),
+  body("description").optional().trim().isLength({ min: 1, max: 2000 }),
+  body("variants").optional().custom((value) => {
+    let variants;
+    try {
+      variants = JSON.parse(value);
+    } catch {
+      throw new Error("Variants must be a valid JSON array");
+    }
+    if (!Array.isArray(variants)) throw new Error("Variants must be an array");
+    for (const v of variants) {
+      if (typeof v.size !== "number" || v.size <= 0) throw new Error("Variant size must be a positive number");
+      if (typeof v.colorName !== "string" || !v.colorName.trim()) throw new Error("Variant colorName is required");
+      if (typeof v.colorHex !== "string" || !/^#([0-9A-F]{3}){1,2}$/i.test(v.colorHex)) throw new Error("Variant colorHex must be a valid hex color");
+      if (typeof v.price !== "number" || v.price < 0) throw new Error("Variant price must be a non-negative number");
+      if (v.compareAtPrice !== undefined && (typeof v.compareAtPrice !== "number" || v.compareAtPrice < 0)) throw new Error("Variant compareAtPrice must be a non-negative number");
+      if (typeof v.stock !== "number" || v.stock < 0) throw new Error("Variant stock must be a non-negative number");
+    }
+    return true;
+  }),
+  body("tags").optional().isString(),
+  validate,
+  async (req, res) => {
+    try {
+      const images = (req.files || []).map((f) => `/uploads/products/${f.filename}`);
+      const variants = req.body.variants ? JSON.parse(req.body.variants) : [];
+      const tags = req.body.tags ? req.body.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
+      const product = await Product.findByIdAndUpdate(req.params.id, { ...req.body, ...(images.length > 0 && { images }), ...(variants.length > 0 && { variants }), ...(tags.length > 0 && { tags }) }, { new: true });
+      if (!product) return res.status(404).json({ error: "Not found" });
+
+      res.json(product);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        error: "Failed to update product",  
+      });
+    }
+  }
+);
 
 // DELETE /api/products/:id` - deletes a product by its ID. Admin only.
 router.delete("/:id", authenticate, requireAdmin, async (req, res) => {

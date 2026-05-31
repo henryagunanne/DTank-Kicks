@@ -4,7 +4,8 @@ import { useState } from "react";
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 
 import { useAuth } from "@/lib/auth-context";
-import { fetchProducts, createProduct, updateProduct, deleteProduct, fetchAllOrders, fetchAdminDashboard, updateOrderStatus, fetchAllCustomers } from "@/lib/admin-api";
+import { createProduct, updateProduct, deleteProduct, fetchAllOrders, fetchAdminDashboard, updateOrderStatus, fetchAllCustomers } from "@/lib/admin-api";
+import { fetchProducts } from "@/lib/product-api";
 import { peso } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -99,10 +100,25 @@ function ProductsTab() {
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
   const [category, setCategory] = useState("");
-  const [price, setPrice] = useState("");
+  // const [price, setPrice] = useState("");
+  const [description, setDescription] = useState("");
+  // const [compareAtPrice, setCompareAtPrice] = useState("");
+  const [tags, setTags] = useState("");
   const [images, setImages] = useState<File[]>([]);
-  const [sizes, setSizes] = useState([{ size: "", stock: "" }]);
-  const [colors, setColors] = useState([{ name: "", hex: "#000000" }]);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
+
+  // Variants are an array of objects with size, colorName, colorHex, and stock properties.
+  // This allows us to manage multiple variants of a product (e.g. different sizes and colors) in the form.
+  const [variants, setVariants] = useState([
+    {
+      size: "",
+      colorName: "",
+      colorHex: "#000000",
+      price: "",
+      compareAtPrice: "",
+      stock: "",
+    },
+  ]);
 
   const { data, isLoading } = useQuery({ 
     queryKey: ["admin-products"], 
@@ -125,6 +141,24 @@ function ProductsTab() {
 
     onError: () => {
       toast.error("Failed to delete product");
+    },
+  });
+
+
+  // Mutation for updating an existing product
+  const updateMutation = useMutation({
+    mutationFn: ({id, formData}: {id: string; formData: FormData;}) => updateProduct(id, formData, accessToken),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [
+          "admin-products",
+        ],
+      });
+
+      setShowAdd(false);
+      setEditingProduct(null);
+      toast.success("Product updated successfully");
     },
   });
 
@@ -153,23 +187,50 @@ function ProductsTab() {
     formData.append("name", name);
     formData.append("brand", brand);
     formData.append("category", category);
-    formData.append("price", price);
+    // formData.append("price", price);
+    formData.append("description", description);
+    // formData.append("compareAtPrice", compareAtPrice);
+    formData.append("tags", tags);
+
+    formData.append(
+      "variants",
+      JSON.stringify(
+        variants.map((v) => ({
+          size: Number(v.size),
+          color: {
+            name: v.colorName,
+            hex: v.colorHex,
+          },
+          price:  Number(v.price),
+          compareAtPrice: v.compareAtPrice ?  Number(v.compareAtPrice) : undefined,
+          stock: Number(v.stock),
+        }))
+      )
+    );
 
     images.forEach((file) => {
       formData.append("images", file);
     });
 
-    createMutation.mutate(formData);
+
+    if (editingProduct) {
+      updateMutation.mutate({id: editingProduct.id, formData});
+    } else {
+      createMutation.mutate(formData);
+    }
   };
 
   
 
   return (
     <div>
+      {/* HEADER with Add Product button */}
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-lg font-bold">Products ({products.length})</h3>
         <button onClick={() => setShowAdd(true)} className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">+ Add Product</button>
       </div>
+
+      {/* TABLE */}
       <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-sm">
           <thead className="bg-secondary/40 text-left text-xs uppercase">
@@ -179,7 +240,7 @@ function ProductsTab() {
               <th>Name</th>
               <th>Category</th>
               <th>Price</th>
-              <th>Stock</th>
+              <th>Stock (total)</th>
               <th></th>
             </tr>
           </thead>
@@ -188,10 +249,35 @@ function ProductsTab() {
               <tr key={p.id} className="border-t border-border">
                 <td className="p-3"><img src={p.images[0]} loading="lazy" className="h-12 w-12 rounded object-cover" alt="" /></td>
                 <td>{p.brand}</td><td className="font-medium">{p.name}</td><td>{p.category}</td>
-                <td>{peso(p.price)}</td>
+                <td>{peso(p.minPrice)} - {peso(p.maxPrice)}</td>
                 <td>{p.sizes.reduce((s, x) => s + x.stock, 0)}</td>
                 <td className="space-x-2 text-xs">
-                  <button className="text-blue-600 hover:underline">Edit</button>
+                  <button
+                    onClick={() => {
+                      setEditingProduct(p);
+                      setName(p.name);
+                      setBrand(p.brand || "");
+                      setCategory(p.category || "");
+                      setDescription(p.description);
+                      setTags((p.tags || []).join(", "));
+
+                      setVariants(
+                        p.variants.map((v: any) => ({
+                          size: String(v.size),
+                          colorName: v.color?.name || "",
+                          colorHex: v.color?.hex || "#000000",
+                          price: v.price,
+                          compareAtPrice: v.compareAtPrice ? v.compareAtPrice : "",
+                          stock: String(v.stock),
+                        }))
+                      );
+
+                      setShowAdd(true);
+                    }} 
+                    className="text-blue-600 hover:underline"
+                  >
+                      Edit
+                  </button>
                   <button  onClick={() => deleteMutation.mutate(p.id)} className="text-destructive hover:underline">Delete</button>
                 </td>
               </tr>
@@ -200,6 +286,7 @@ function ProductsTab() {
         </table>
       </div>
 
+      {/* MODAL */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowAdd(false)}>
           <div onClick={(e) => e.stopPropagation()} className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-card p-6">
@@ -207,59 +294,88 @@ function ProductsTab() {
             <form className="mt-4 grid gap-3 text-sm">
               <input placeholder="Name" onChange={(e) => setName(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3" />
               <input placeholder="Brand" onChange={(e) => setBrand(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3" />
-              <input placeholder="Category" onChange={(e) => setCategory(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3" />
-              <input placeholder="Price" type="number" onChange={(e) => setPrice(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3" />
-              <div>
-                <label className="mb-2 block font-medium">Sizes & Stock</label>
-                <div className="space-y-2">{sizes.map((s, index) => (
-                    <div key={index} className="flex gap-2">
-                      <input
-                        type="number"
-                        placeholder="Size"
-                        value={s.size}
-                        onChange={(e) => {
-                          const next = [...sizes];
-                          next[index].size = e.target.value;
-                          setSizes(next);
-                        }}
-                        className="h-10 flex-1 rounded-md border border-input bg-background px-3"
-                      />
+              <select aria-label="Category" onChange={(e) => setCategory(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3">
+                <option value="">Select category</option>
+                <option value="Sneakers">Sneakers</option>
+                <option value="Boots">Boots</option>
+                <option value="Formal">Formal</option>
+                <option value="Sports">Sports</option>
+                <option value="Sandals">Sandals</option>
+              </select>
+              <input placeholder="Tags (comma separated)" onChange={(e) => setTags(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3" />
 
-                      <input
-                        type="number"
-                        placeholder="Stock"
-                        value={s.stock}
-                        onChange={(e) => {
-                          const next = [...sizes];
-                          next[index].stock = e.target.value;
-                          setSizes(next);
-                        }}
-                        className="h-10 flex-1 rounded-md border border-input bg-background px-3"
-                      />
+              <textarea placeholder="Description" onChange={(e) => setDescription(e.target.value)} className="h-20 rounded-md border border-input bg-background px-3" />
 
-                      <button type="button" onClick={() => setSizes(sizes.filter((_, i) => i !== index))} className="px-3">✕</button>
-                    </div>
-                  ))}
-                </div>
+              {/* VARIANTS */}
+              <div className="space-y-2">
+                <h4 className="font-bold">Variants</h4>
 
-                <button
-                  type="button"
-                  className="mt-2 text-sm text-blue-600"
-                  onClick={() => setSizes([...sizes,{size: "", stock: ""},])}
-                >
-                  + Add Size
+                {variants.map((v, i) => (
+                  <div key={i} className="grid grid-cols-4 gap-2">
+                    <input aria-label="Size" placeholder="Size" type="number"
+                      onChange={(e) => {
+                        const next = [...variants];
+                        next[i].size = e.target.value;
+                        setVariants(next);
+                      }}
+                      className="h-10 rounded-md border border-input bg-background px-3"
+                    />
+
+                    <input aria-label="Color Name" placeholder="Color"
+                      onChange={(e) => {
+                        const next = [...variants];
+                        next[i].colorName = e.target.value;
+                        setVariants(next);
+                      }}
+                      className="h-10 rounded-md border border-input bg-background px-3"
+                    />
+
+                    <input type="color" aria-label="Color Hex" value={v.colorHex}
+                      onChange={(e) => {
+                        const next = [...variants];
+                        next[i].colorHex = e.target.value;
+                        setVariants(next);
+                      }}
+                      className="h-10 rounded-md border border-input bg-background px-3"
+                    />
+
+                    <input placeholder="Price" type="number" className="h-10 rounded-md border border-input bg-background px-3" 
+                      onChange={(e) => {
+                        const next = [...variants];
+                        next[i].price = e.target.value;
+                        setVariants(next);
+                      }} 
+                    />
+                    <input placeholder="Compare At Price" type="number" className="h-10 rounded-md border border-input bg-background px-3"
+                      onChange={(e) => {
+                        const next = [...variants];
+                        next[i].compareAtPrice = e.target.value;
+                        setVariants(next);
+                      }} 
+                    />
+
+                    <input placeholder="Stock" type="number"
+                      onChange={(e) => {
+                        const next = [...variants];
+                        next[i].stock = e.target.value;
+                        setVariants(next);
+                      }}
+                      className="h-10 rounded-md border border-input bg-background px-3"
+                    />
+                  </div>
+                ))}
+
+                <button type="button" onClick={() => setVariants([...variants, { size: "", colorName: "", colorHex: "#000000", price: "", compareAtPrice: "", stock: "" },])} className="text-blue-600 text-sm">
+                  + Add Variant
                 </button>
               </div>
 
-              <input 
-                type="file" 
-                accept="image/*" 
+              <input type="file" accept="image/*" multiple  aria-label="Product Images"
                 onChange={(e) => {
                   const files = Array.from(e.target.files ?? []);
                   setImages(files.slice(0, 6)); // Limit to 6 images
-                }}
-                multiple 
-                aria-label="Product Images" />
+                }} 
+               />
               <div className="mt-2 flex justify-end gap-2">
                 <button type="button" onClick={() => setShowAdd(false)} className="rounded-md border border-border px-4 py-2">Cancel</button>
                 <button type="button" onClick={handleCreate} className="rounded-md bg-primary px-4 py-2 text-primary-foreground">Save</button>

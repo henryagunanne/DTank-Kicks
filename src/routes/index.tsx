@@ -17,7 +17,7 @@ import { useState } from "react";
 
 
 import { CATEGORIES } from "@/lib/data";
-import { fetchNewArrivals, fetchProductsByIds, fetchProductsByBrand } from "@/lib/api";
+import { fetchNewArrivals, fetchProductsByIds, fetchProductsByBrand } from "@/lib/product-api";
 import { useRecent } from "@/lib/recently-viewed";
 import { ProductCardSkeleton, WishlistableCard } from "@/components/site/ProductCard";
 import { BrandMarquee } from "@/components/site/Marquee";

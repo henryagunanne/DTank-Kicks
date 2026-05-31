@@ -13,21 +13,44 @@ const mongoose = require("mongoose");
 
 const VariantSchema = new mongoose.Schema(
   {
+    sku: {
+      type: String,
+      trim: true,
+    },
+
     size: {
       type: Number,
       required: true,
     },
 
     color: {
-      name: String,
-      hex: String,
+      name: {
+        type: String,
+        required: true,
+      },
+
+      hex: {
+        type: String,
+      },
+    },
+
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    compareAtPrice: {
+      type: Number,
+      min: 0,
     },
 
     stock: {
       type: Number,
       default: 0,
+      min: 0,
     },
-  }, { _id: false });
+  }, { _id: true });
 
 
 const ProductSchema = new mongoose.Schema({
@@ -51,14 +74,6 @@ const ProductSchema = new mongoose.Schema({
   description: {
     type: String,
     default: "",
-  },
-  price: {
-    type: Number,
-    required: true,
-    min: 0,
-  },
-  compareAtPrice: {
-    type: Number,
   },
   images: {
     type: [String],
@@ -95,6 +110,24 @@ ProductSchema.set("toJSON", {
     ret.id = ret._id.toString();
     delete ret._id;
   },
+});
+
+// Virtual fields for minPrice and maxPrice based on the variants array. 
+// These are not stored in the database but are calculated on the fly when converting to JSON.
+ProductSchema.virtual("minPrice").get(function () {
+  if (!this.variants?.length) return 0;
+
+  return Math.min(
+    ...this.variants.map(v => v.price)
+  );
+});
+
+ProductSchema.virtual("maxPrice").get(function () {
+  if (!this.variants?.length) return 0;
+
+  return Math.max(
+    ...this.variants.map(v => v.price)
+  );
 });
 
 module.exports = mongoose.model("Product", ProductSchema);

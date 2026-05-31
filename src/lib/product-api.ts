@@ -96,6 +96,7 @@ export async function fetchProducts(params: ProductsParams = {}): Promise<Produc
     if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
   }
   const data = await request<any>(`/api/products${qs.toString() ? `?${qs}` : ""}`);
+  
   return {
     items: (data?.items ?? []).map(normalizeProduct),
     total: Number(data?.total ?? 0),

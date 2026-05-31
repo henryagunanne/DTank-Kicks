@@ -1,3 +1,9 @@
+// This file defines the TypeScript types used throughout the application, 
+// such as Product, CartItem, and Review. These types are imported and used 
+// in various components and API functions to ensure type safety and consistency 
+// when working with product data, cart items, and reviews.
+
+
 export type Category = "Sneakers" | "Boots" | "Formal" | "Sports" | "Sandals";
 export type Brand = "Nike" | "Adidas" | "Puma" | "New Balance" | "Vans" | "Converse";
 

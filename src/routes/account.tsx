@@ -11,7 +11,8 @@ import { useQuery } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
-import { fetchWishlist, fetchOrders } from "@/lib/api";
+import { fetchOrders } from "@/lib/order-api";
+import { fetchWishlist } from "@/lib/product-api";
 
 import { WishlistableCard } from "@/components/site/ProductCard";
 

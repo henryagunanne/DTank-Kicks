@@ -11,7 +11,8 @@ import { useWishlist } from "@/lib/wishlist-context";
 export function ProductCard({ product }: { product: Product }) {
   const { add } = useCart();
   const [picker, setPicker] = useState(false);
-  const avail = product.sizes.filter((s) => s.stock > 0);
+  const avail = (product.sizes ?? []).filter((s) => s.stock > 0);
+  const colors = product.colors ?? [];
 
   return (
     <div className="group relative flex flex-col">
@@ -39,7 +40,7 @@ export function ProductCard({ product }: { product: Product }) {
           {product.compareAtPrice && <span className="text-xs text-muted-foreground line-through">{peso(product.compareAtPrice)}</span>}
         </div>
         <div className="mt-2 flex gap-1.5">
-          {product.colors.slice(0, 4).map((c) => (
+          {colors.slice(0, 4).map((c) => (
             <span key={c.name} title={c.name} className="h-3.5 w-3.5 rounded-full border border-border" style={{ background: c.hex }} />
           ))}
         </div>
@@ -53,7 +54,7 @@ export function ProductCard({ product }: { product: Product }) {
               <button
                 key={s.size}
                 onClick={() => {
-                  add({ productId: product.id, name: product.name, brand: product.brand, image: product.images[0], size: s.size, color: product.colors[0].name, quantity: 1, price: product.price });
+                  add({ productId: product.id, name: product.name, brand: product.brand, image: product.images[0], size: s.size, color: colors[0]?.name ?? "Default", quantity: 1, price: product.price });
                   toast.success(`Added UK ${s.size} to cart`);
                   setPicker(false);
                 }}
@@ -68,6 +69,7 @@ export function ProductCard({ product }: { product: Product }) {
     </div>
   );
 }
+
 
 
 // A skeleton version of the ProductCard, used as a placeholder while loading real product data

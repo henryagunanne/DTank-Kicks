@@ -14,7 +14,7 @@ import { useCart } from "@/lib/cart-context";
 import { useTheme } from "@/lib/theme-context";
 import { useAuth } from "@/lib/auth-context";
 import { useWishlist } from "@/lib/wishlist-context";
-import { fetchProducts } from "@/lib/api";
+import { fetchProducts } from "@/lib/product-api";
 import dtankDark from "@/assets/dtank-dark.svg";
 import dtankWhite from "@/assets/dtank-white.svg";
 
