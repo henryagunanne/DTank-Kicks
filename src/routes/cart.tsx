@@ -1,3 +1,10 @@
+/*
+  This is the cart page where users can review their selected items, adjust quantities, 
+  apply coupons, and proceed to checkout. It uses the cart context to manage state and 
+  perform actions like updating quantities and removing items. The order summary calculates 
+  totals, discounts, shipping, and tax based on the cart contents.
+*/
+
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Minus, Plus, X, ShoppingBag } from "lucide-react";
 import { useState } from "react";
@@ -7,7 +14,7 @@ import { peso } from "@/lib/format";
 
 export const Route = createFileRoute("/cart")({
   component: CartPage,
-  head: () => ({ meta: [{ title: "Your Cart — SoleStore" }] }),
+  head: () => ({ meta: [{ title: "Your Cart — DTank-Kicks" }] }),
 });
 
 function CartPage() {
@@ -15,6 +22,8 @@ function CartPage() {
   const [coupon, setCoupon] = useState("");
   const [discount, setDiscount] = useState(0);
 
+  // Shipping is free for orders over 2000, otherwise it's 150. Tax is 12% of the subtotal after discount. 
+  // Total is subtotal minus discount plus shipping and tax, but never less than 0.
   const shipping = subtotal === 0 ? 0 : subtotal >= 2000 ? 0 : 150;
   const tax = Math.round((subtotal - discount) * 0.12);
   const total = Math.max(0, subtotal - discount + shipping + tax);
@@ -30,6 +39,9 @@ function CartPage() {
     );
   }
 
+  // The applyCoupon function checks if the entered coupon code is "SOLE10". 
+  // If it is, it applies a 10% discount to the subtotal and shows a success toast. If the code is invalid, it resets the discount to 0 and shows an error toast.
+  // In a real application, you would likely want to validate the coupon code with the server to prevent abuse and ensure it applies to the correct items.
   const applyCoupon = () => {
     if (coupon.toUpperCase() === "SOLE10") { setDiscount(Math.round(subtotal * 0.1)); toast.success("10% discount applied"); }
     else { setDiscount(0); toast.error("Invalid coupon"); }
@@ -56,9 +68,9 @@ function CartPage() {
                 </div>
                 <div className="mt-auto flex items-center justify-between">
                   <div className="flex items-center rounded-full border border-border">
-                    <button onClick={() => updateQty(it.id, it.quantity - 1)} className="p-2"><Minus className="h-3.5 w-3.5" /></button>
+                    <button aria-label="Decrease quantity" onClick={() => updateQty(it.id, it.quantity - 1)} className="p-2"><Minus className="h-3.5 w-3.5" /></button>
                     <span className="w-8 text-center text-sm font-semibold">{it.quantity}</span>
-                    <button onClick={() => updateQty(it.id, it.quantity + 1)} className="p-2"><Plus className="h-3.5 w-3.5" /></button>
+                    <button aria-label="Increase quantity" onClick={() => updateQty(it.id, it.quantity + 1)} className="p-2"><Plus className="h-3.5 w-3.5" /></button>
                   </div>
                   <div className="font-bold">{peso(it.price * it.quantity)}</div>
                 </div>

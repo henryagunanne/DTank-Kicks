@@ -103,6 +103,7 @@ export function WishlistableCard({ product }: { product: Product }) {
             e.preventDefault();
             e.stopPropagation();
             toggle(product.id);
+            toast.success(`Added ${product.name} to wishlist`);
           }}
           aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
           className={`absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-all hover:scale-110 ${

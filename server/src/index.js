@@ -32,7 +32,7 @@ app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:3000", creden
 app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
 app.use(morgan("dev"));
-app.use("/uploads", express.static(path.join(__dirname, "..", "uploads"))); // Serve uploaded images from the /uploads directory
+app.use("/uploads", express.static(path.join(__dirname, "..", "uploads"))); // Serve uploaded images
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));

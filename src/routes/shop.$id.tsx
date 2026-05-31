@@ -6,10 +6,10 @@
 
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Heart, Minus, Plus, Star, Truck, RotateCcw, ShieldCheck, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { fetchProductById, fetchProducts, fetchProductsByIds, fetchReviews } from "@/lib/api";
+import { fetchProductById, fetchProducts, fetchProductsByIds, fetchReviews, createReview, type CreateReviewInput } from "@/lib/api";
 import type { Product, Review } from "@/lib/types";
 import { peso } from "@/lib/format";
 import { useCart } from "@/lib/cart-context";
@@ -204,26 +204,123 @@ function ProductPage() {
           {tab === "size" && <p>This style fits true to size. If you're between sizes, we recommend going up half a size for a relaxed fit.</p>}
           {tab === "ship" && <p>Standard shipping (3–5 days) is ₱150, free over ₱2,000. Express (1–2 days) is ₱350. Free returns within 30 days of delivery.</p>}
           {tab === "rev" && (
-            <div className="space-y-8">
-              <ReviewForm productId={product.id} />
-              <div className="space-y-6">
-                {reviews.map((r) => (
-                  <div key={r.id} className="rounded-xl border border-border p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-bold text-foreground">{r.title}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">by {r.userName}{r.verifiedPurchase && " • Verified buyer"}</div>
-                      </div>
-                      <div className="text-gold">{"★".repeat(r.rating)}<span className="text-muted-foreground">{"★".repeat(5 - r.rating)}</span></div>
-                    </div>
-                    <p className="mt-3 text-sm text-muted-foreground">{r.body}</p>
+          <div className="space-y-8">
+         
+            <div>
+              <div className="mb-4 flex items-baseline justify-between">
+                <h3 className="text-base font-bold text-foreground">
+                  Customer reviews{reviewTotal ? ` (${reviewTotal})` : ""}
+                </h3>
+                {product.reviewCount > 0 && (
+                  <div className="flex items-center gap-1 text-sm">
+                    <Star className="h-4 w-4 fill-gold text-gold" />
+                    <span className="font-semibold text-foreground">{product.rating.toFixed(1)}</span>
+                    <span className="text-muted-foreground">/ 5</span>
                   </div>
-                ))}
+                )}
               </div>
+
+              {reviewData === undefined ? (
+                <div className="space-y-3">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="h-24 animate-pulse rounded-xl border border-border bg-secondary/40" />
+                  ))}
+                </div>
+              ) : reviews.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                  No reviews yet. Be the first to share your thoughts.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((r) => {
+                    const key = (r as any).id ?? (r as any)._id;
+                    const userName =
+                      (r as any).userName ?? (r as any).user?.name ?? "Anonymous";
+                    const created = (r as any).createdAt
+                      ? new Date((r as any).createdAt).toLocaleDateString(undefined, {
+                          year: "numeric", month: "short", day: "numeric",
+                        })
+                      : null;
+                    const images: string[] = (r as any).images ?? [];
+                    return (
+                      <article key={key} className="rounded-xl border border-border p-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-sm font-bold text-foreground">{r.title}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              by {userName}
+                              {r.verifiedPurchase && (
+                                <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-gold/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold">
+                                  <ShieldCheck className="h-3 w-3" /> Verified buyer
+                                </span>
+                              )}
+                              {created && <span className="ml-2">• {created}</span>}
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-gold" aria-label={`${r.rating} out of 5 stars`}>
+                            {"★".repeat(r.rating)}
+                            <span className="text-muted-foreground">{"★".repeat(5 - r.rating)}</span>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-sm text-muted-foreground">{r.body}</p>
+
+                        {/*  If the review includes images, we display them in a grid below the review text. */}
+                        {images.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {images.map((src, i) => {
+                              const getImageSrc = (path: string) => {
+                                // already absolute URL
+                                if (path.startsWith("http")) return path;
+
+                                // normalize multer paths like "uploads/x.jpg"
+                                if (path.startsWith("/uploads")) return path;
+
+                                if (path.startsWith("uploads")) return `/${path}`;
+
+                                // fallback (if backend serves via /uploads)
+                                return `/uploads/${path}`;
+                              };
+
+                              return (
+                                <img
+                                  key={i}
+                                  src={getImageSrc(src)}
+                                  alt={`Review image ${i + 1}`}
+                                  loading="lazy"
+                                  className="h-20 w-20 rounded-md object-cover"
+                                />
+                              );
+                            })}
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+
+                  {reviewData && reviewData.pages > 1 && (
+                    <div className="pt-2 text-center">
+                      <Link
+                        to="/shop/$id"
+                        params={{ id: product.id }}
+                        className="text-xs font-semibold uppercase tracking-wider text-gold hover:underline"
+                      >
+                        See all {reviewTotal} reviews →
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
+              </div>
+
+              {/* If the user is logged in, we show the review submission form below the list of reviews. */}
+              {user && (
+                <ReviewForm productId={product.id} />
+              )}
             </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+
 
       {/* Related */}
       <section className="mt-16">
@@ -245,22 +342,85 @@ function ProductPage() {
   );
 }
 
+
+// Review form component used on the product details page. 
+// It allows users to submit a rating, title, body, and optional image for their review.
 function ReviewForm({ productId }: { productId: string }) {
   const [rating, setRating] = useState(5);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [images, setImages] = useState<File[]>([]);
+  const { accessToken } = useAuth();
+
+  const queryClient = useQueryClient();
+
+  // We use a mutation here because we're sending a POST request to create a new review, 
+  // and we want to handle the loading and error states of that request.
+  const mutation = useMutation({
+    mutationFn: (data: FormData) => createReview(productId, data, accessToken ?? undefined),
+    onSuccess: () => {
+      toast.success("Review submitted");
+
+      // reset form
+      setTitle("");
+      setBody("");
+      setRating(5);
+      setImages([]);
+
+      // refresh reviews
+      queryClient.invalidateQueries({
+        queryKey: ["product-reviews", productId],
+      });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+    },
+  });
+
+  // When the form is submitted, we gather the data into a FormData object and call 
+  // mutation.mutate to trigger the createReview function.
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const formData = new FormData();
+
+    // formData.append("product", productId); -- IGNORE -- we can get productId from the URL in the API route, no need to send it from the client
+    formData.append("rating", String(rating));
+    formData.append("title", title);
+    formData.append("body", body);
+
+    images.forEach((file) => {
+      formData.append("images", file);
+    });
+
+
+    mutation.mutate(formData);
+  };
+  
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); toast.success("Review submitted (demo)"); setTitle(""); setBody(""); }}
+      onSubmit={onSubmit}
       className="rounded-xl border border-border p-5"
     >
       <h3 className="text-sm font-bold text-foreground">Write a review</h3>
-      <div className="mt-3 text-xs text-muted-foreground">Only verified buyers can submit reviews. (Demo mode — anyone can.)</div>
+      <div className="mt-3 text-xs text-muted-foreground">Only verified buyers can submit reviews.</div>
       <div className="mt-3"><StarInput value={rating} onChange={setRating} /></div>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" required maxLength={100} className="mt-3 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" />
       <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Your review..." required maxLength={1000} rows={4} className="mt-2 w-full rounded-md border border-input bg-background p-3 text-sm" />
-      <input type="file" accept="image/*" aria-label="Upload review image" className="mt-2 text-xs" />
-      <button className="mt-3 rounded-full bg-primary px-5 py-2 text-xs font-bold uppercase text-primary-foreground" data-product={productId}>Submit Review</button>
+      <input
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          setImages(files.slice(0, 4));
+        }}
+        aria-label="Upload review image" 
+        className="mt-2 text-xs"
+      />
+      <button type="submit" disabled={mutation.isPending} className="mt-3 rounded-full bg-primary px-5 py-2 text-xs font-bold uppercase text-primary-foreground" data-product={productId}>
+        {mutation.isPending ? "Submitting..." : "Submit Review"}
+      </button>
     </form>
   );
 }

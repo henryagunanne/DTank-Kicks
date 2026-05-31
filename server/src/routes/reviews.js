@@ -36,9 +36,13 @@ router.post("/:id/reviews",
     const verified = !!(await Order.findOne({ user: req.user._id, "items.product": req.params.id }));
     const images = (req.files || []).map((f) => `/uploads/${f.filename}`);
     const review = await Review.create({
-      product: req.params.id, user: req.user._id,
-      rating: Number(req.body.rating), title: req.body.title, body: req.body.body,
-      images, verifiedPurchase: verified,
+      product: req.params.id, 
+      user: req.user._id,
+      rating: Number(req.body.rating), 
+      title: req.body.title, 
+      body: req.body.body,
+      images, 
+      verifiedPurchase: verified,
     });
     // refresh product rating
     const agg = await Review.aggregate([

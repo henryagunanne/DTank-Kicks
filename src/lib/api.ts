@@ -8,8 +8,20 @@
 // isError state gets triggered correctly.
 
 import type { Product, Review } from "./types";
+import type { CartItem } from "./types";
+
+
+const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+export type GuestCartItem = CartItem;
+
+export interface ServerCart {
+  items: CartItem[];
+  totalItems: number;
+  totalPrice: number;
+}
 
 export interface ProductsResponse {
   items: Product[];
@@ -39,6 +51,15 @@ export interface ProductsParams {
   q?: string;
 }
 
+export interface CreateReviewInput {
+  product: string;
+  rating: number;
+  title: string;
+  body: string;
+  images?: string[];
+}
+
+
 // ─── Products ─────────────────────────────────────────────────────────────────
 
 export async function fetchProducts(params: ProductsParams = {},): Promise<ProductsResponse> {
@@ -51,7 +72,7 @@ export async function fetchProducts(params: ProductsParams = {},): Promise<Produ
     }
   });
 
-  const res = await fetch(`/api/products?${query}`);
+  const res = await fetch(`${API_BASE}/api/products?${query}`);
   if (!res.ok) throw new Error("Failed to fetch products");
   return res.json();
 }
@@ -66,7 +87,7 @@ export async function fetchNewArrivals(limit = 8): Promise<Product[]> {
 
 // Fetch a single product by its ID — used for product details page
 export async function fetchProductById(id: string): Promise<Product> {
-  const res = await fetch(`/api/products/${id}`);
+  const res = await fetch(`${API_BASE}/api/products/${id}`);
   if (!res.ok) throw new Error("Product not found");
   return res.json();
 }
@@ -94,16 +115,43 @@ export async function fetchProductsByBrand(
   return data.items;
 }
 
+// ────── Reviews ───────────────────────────────────────────────────────────────
 // Fetch reviews for a product with pagination — used on the product details page and reviews page
 export async function fetchReviews(productId: string, page = 1, limit = 10): Promise<ReviewsResponse> {
   const query = new URLSearchParams();
   query.set("page", String(page));
   query.set("limit", String(limit));
 
-  const res = await fetch(`/api/products/${productId}/reviews?${query}`);
+  const res = await fetch(`${API_BASE}/api/products/${productId}/reviews?${query}`);
   if (!res.ok) throw new Error("Failed to fetch reviews");
   return res.json();
 }
+
+
+// Create a new review for a product — called from the review form on the product details page
+export async function createReview( productId: string, data: FormData, token?: string): Promise<Review> {
+  const headers: Record<string, string> = { };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  // const productId = data.get("product");
+
+  const res = await fetch(`${API_BASE}/api/products/${productId}/reviews`, {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: data,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || "Failed to create review");
+  }
+
+  return res.json();
+}
+
 
 // ─── Wishlist ─────────────────────────────────────────────────────────────────
 // Fetch the user's wishlist items — returns full product objects, not just IDs
@@ -113,7 +161,7 @@ export async function fetchWishlist(token?: string): Promise<Product[]> {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch("/api/wishlist", {
+  const res = await fetch(`${API_BASE}/api/wishlist`, {
     credentials: "include",
     headers,
   });
@@ -132,7 +180,7 @@ export async function toggleWishlist( productId: string, token?: string): Promis
   }
 
   const res = await fetch(
-    `/api/wishlist/toggle/${productId}`,
+    `${API_BASE}/api/wishlist/toggle/${productId}`,
     {
       method: "POST",
       credentials: "include",
@@ -153,7 +201,7 @@ export async function toggleWishlist( productId: string, token?: string): Promis
 // Orders
 // ─────────────────────────────────────────────
 export async function fetchOrders() {
-  const res = await fetch("/api/orders/my-orders", {
+  const res = await fetch(`${API_BASE}/api/orders/my-orders`, {
     credentials: "include",
   });
 
@@ -164,3 +212,60 @@ export async function fetchOrders() {
   return res.json();
 }
 
+
+// ─────────────────────────── Cart API calls ───────────────────────────
+// These are used by the cart context to keep the cart in sync with the backend for logged-in users.
+// For guests, the cart context uses localStorage and doesn't call these functions at all.
+
+
+// Generic helper for making API requests with proper headers and error handling
+async function request<T>(path: string, token: string | null, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
+    ...init,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Cart API ${res.status}: ${text || res.statusText}`);
+  }
+  const data = (await res.json().catch(() => ({}))) as any;
+  return data as T;
+}
+
+// The cart context calls these functions to fetch the cart, add/update items, remove items, 
+// and merge a guest cart on login. Each function normalizes the response into the ServerCart shape.
+function normalize(raw: any): ServerCart {
+  const items: CartItem[] = Array.isArray(raw?.items) ? raw.items : Array.isArray(raw) ? raw : [];
+  const safeItems = items.filter((i) => i && i.productId);
+  const totalItems = safeItems.reduce((s, i) => s + (i.quantity || 0), 0);
+  const totalPrice = safeItems.reduce((s, i) => s + (i.price || 0) * (i.quantity || 0), 0);
+  return { items: safeItems, totalItems, totalPrice };
+}
+
+export async function fetchCart(token: string | null): Promise<ServerCart> {
+  const data = await request<any>("/api/cart", token);
+  return normalize(data);
+}
+
+export async function addOrUpdateItem(item: CartItem, token: string | null): Promise<ServerCart> {
+  const data = await request<any>("/api/cart", token, { method: "POST", body: JSON.stringify(item) });
+  return normalize(data);
+}
+
+export async function removeItem(id: string, token: string | null): Promise<ServerCart> {
+  const data = await request<any>(`/api/cart/${encodeURIComponent(id)}`, token, { method: "DELETE" });
+  return normalize(data);
+}
+
+export async function mergeCart(guestItems: CartItem[], token: string | null): Promise<ServerCart> {
+  const data = await request<any>("/api/cart/merge", token, {
+    method: "PUT",
+    body: JSON.stringify({ items: guestItems }),
+  });
+  return normalize(data);
+}

@@ -143,9 +143,6 @@ export function Header() {
             </Link>
           )}
 
-          {/* Account */}
-          <Link to="/account" className="rounded-full p-2 hover:bg-secondary" aria-label="Account"><User className="h-5 w-5" /></Link>
-
           {/* Cart */}
           <Link to="/cart" className="relative rounded-full p-2 hover:bg-secondary" aria-label="Cart">
             <ShoppingBag className="h-5 w-5" />
@@ -155,6 +152,10 @@ export function Header() {
               </span>
             )}
           </Link>
+
+          {/* Account */}
+          <Link to="/account" className="rounded-full p-2 hover:bg-secondary" aria-label="Account"><User className="h-5 w-5" /></Link>
+
         </div>
       </div>
 
