@@ -11,11 +11,14 @@ The routes use Multer for handling image uploads and include validation middlewa
 
 const router = require("express").Router();
 const multer = require("multer");
+const mongoose = require("mongoose");
 const path = require("path");
 const { body, query } = require("express-validator");
 const Product = require("../models/Product");
 const { authenticate, requireAdmin } = require("../middleware/auth");
 const { validate } = require("../middleware/error");
+
+const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // Configure Multer for image uploads
 const upload = multer({
@@ -96,6 +99,7 @@ router.get("/",
 
 // GET /api/products/:id` - retrieves details of a single product by its ID.
 router.get("/:id", async (req, res) => {
+  if (!isValidId(req.params.id)) return res.status(404).json({ error: "Not found" });
   const p = await Product.findById(req.params.id);
   if (!p) return res.status(404).json({ error: "Not found" });
   res.json(p);
@@ -175,6 +179,9 @@ router.put("/:id", authenticate, requireAdmin, upload.array("images", 6),
   body("tags").optional().isString(),
   validate,
   async (req, res) => {
+
+    if (!isValidId(req.params.id)) return res.status(404).json({ error: "Not found" });
+
     try {
       const images = (req.files || []).map((f) => `/uploads/products/${f.filename}`);
       const variants = req.body.variants ? JSON.parse(req.body.variants) : [];
@@ -194,6 +201,7 @@ router.put("/:id", authenticate, requireAdmin, upload.array("images", 6),
 
 // DELETE /api/products/:id` - deletes a product by its ID. Admin only.
 router.delete("/:id", authenticate, requireAdmin, async (req, res) => {
+  if (!isValidId(req.params.id)) return res.status(404).json({ error: "Not found" });
   await Product.findByIdAndDelete(req.params.id);
   res.json({ ok: true });
 });

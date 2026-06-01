@@ -5,7 +5,8 @@
 
 import type { CartItem } from "./types";
 
-const { API_BASE } = (import.meta as any).env?.VITE_API_URL ?? "";
+// Determine API base URL from environment variable, with a fallback for server-side rendering
+const API_BASE = typeof window === "undefined" ? (import.meta as any).env?.VITE_API_URL || "http://localhost:4000" : "";
 
 
 export interface ServerCart {
@@ -40,7 +41,7 @@ function normalize(raw: any): ServerCart {
   const items: CartItem[] = Array.isArray(raw?.items) ? raw.items : Array.isArray(raw) ? raw : [];
   const safeItems = items.filter((i) => i && i.productId);
   const totalItems = safeItems.reduce((s, i) => s + (i.quantity || 0), 0);
-  const totalPrice = safeItems.reduce((s, i) => s + (i.price || 0) * (i.quantity || 0), 0);
+  const totalPrice = safeItems.reduce((s, i) => s + (i.priceAtAdd || 0) * (i.quantity || 0), 0);
   return { items: safeItems, totalItems, totalPrice };
 }
 

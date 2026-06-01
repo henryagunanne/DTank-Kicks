@@ -13,13 +13,18 @@ export function ProductCard({ product }: { product: Product }) {
   const [picker, setPicker] = useState(false);
   const avail = (product.sizes ?? []).filter((s) => s.stock > 0);
   const colors = product.colors ?? [];
+  const variant = product.variants.find(
+    v => v.stock > 0
+  );
+
+  if (!variant) return;
 
   return (
     <div className="group relative flex flex-col">
       <Link to="/shop/$id" params={{ id: product.id }} className="hover-zoom relative block aspect-square overflow-hidden rounded-xl bg-secondary">
         <img src={product.images[0]} alt={product.name} loading="lazy" className="h-full w-full object-cover" />
         {product.isNew && <span className="absolute left-3 top-3 rounded-full bg-gold px-2 py-1 text-[10px] font-bold uppercase text-gold-foreground">New</span>}
-        {product.compareAtPrice && <span className="absolute right-3 top-3 rounded-full bg-destructive px-2 py-1 text-[10px] font-bold text-destructive-foreground">Sale</span>}
+        {variant.compareAtPrice && <span className="absolute right-3 top-3 rounded-full bg-destructive px-2 py-1 text-[10px] font-bold text-destructive-foreground">Sale</span>}
       </Link>
       <button
         onClick={() => setPicker((p) => !p)}
@@ -36,8 +41,8 @@ export function ProductCard({ product }: { product: Product }) {
           {product.rating.toFixed(1)} <span>({product.reviewCount})</span>
         </div>
         <div className="mt-1 flex items-center gap-2">
-          <span className="text-sm font-bold">{peso(product.price)}</span>
-          {product.compareAtPrice && <span className="text-xs text-muted-foreground line-through">{peso(product.compareAtPrice)}</span>}
+          <span className="text-sm font-bold">{peso(product.minPrice)}</span>
+          {variant.compareAtPrice && <span className="text-xs text-muted-foreground line-through">{peso(variant.compareAtPrice)}</span>}
         </div>
         <div className="mt-2 flex gap-1.5">
           {colors.slice(0, 4).map((c) => (
@@ -54,7 +59,7 @@ export function ProductCard({ product }: { product: Product }) {
               <button
                 key={s.size}
                 onClick={() => {
-                  add({ productId: product.id, name: product.name, brand: product.brand, image: product.images[0], size: s.size, color: colors[0]?.name ?? "Default", quantity: 1, price: product.price });
+                  add({ productId: product.id, variantId: variant.id, name: product.name, brand: product.brand, image: product.images[0],  quantity: 1, priceAtAdd: variant.price, size: variant.size, color: variant.color.name });
                   toast.success(`Added UK ${s.size} to cart`);
                   setPicker(false);
                 }}

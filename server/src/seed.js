@@ -1,10 +1,12 @@
 require("dotenv").config();
 const bcrypt = require("bcrypt");
 const connectDB = require("./config/db");
+
 const User = require("./models/User");
 const Product = require("./models/Product");
 const Order = require("./models/Order");
 const Review = require("./models/Review");
+const Cart = require("./models/Cart"); // ✅ NEW
 
 const img = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=80`;
 const SIZES = [4,5,6,7,8,9,10,11,12,13,14,15];
@@ -48,93 +50,140 @@ const products = [
   ["New Balance","Boots","Rainier Trail Boot",10950,[C.brown,C.tan]],
 ];
 
+
+function makeVariants(colors, basePrice, brand, name) {
+  return colors.flatMap((color) =>
+    SIZES.map((size, i) => ({
+      sku: `${brand}-${name}-${color.name}-${size}`.replace(/\s+/g, "-").toLowerCase(),
+      size,
+      color,
+      price: basePrice,
+      stock: STOCK_PATTERN[i % STOCK_PATTERN.length],
+    }))
+  );
+}
+
 async function run() {
   await connectDB();
-  await Promise.all([User.deleteMany({}), Product.deleteMany({}), Order.deleteMany({}), Review.deleteMany({})]);
 
-  const adminHash = await bcrypt.hash("Admin1234!", 12);
-  const customerHash = await bcrypt.hash("Customer1234!", 12);
-  const admin = await User.create({ name: "Admin", email: "admin@dtank-kicks.com", passwordHash: adminHash, role: "admin" });
-  const c1 = await User.create({ name: "Marco Santos", email: "marco@example.com", passwordHash: customerHash, phone: "+639171234567" });
-  const c2 = await User.create({ name: "Jenny Lopez", email: "jen@example.com", passwordHash: customerHash, phone: "+639179876543" });
-  const c3 = await User.create({ name: "Maria Lopez", email: "maria@example.com", passwordHash: customerHash, phone: "+639179876857" });
+  await Promise.all([
+    User.deleteMany({}),
+    Product.deleteMany({}),
+    Order.deleteMany({}),
+    Review.deleteMany({}),
+    Cart.deleteMany({}), // ✅ NEW
+  ]);
 
-  const created = await Product.insertMany(products.map(([brand, category, name, price, colors], i) => ({
-    name, brand, category, price,
-    compareAtPrice: i % 4 === 0 ? Math.round(price * 1.25) : undefined,
-    description: "Premium engineered upper, cushioned midsole, durable rubber outsole.",
-    images: [img(photos[i % photos.length]), img(photos[(i + 3) % photos.length]), img(photos[(i + 7) % photos.length])],
-    variants: variantArr(colors),
-    rating: 3.8 + ((i * 13) % 12) / 10, reviewCount: 12 + (i * 7) % 240,
-    tags: [category.toLowerCase(), brand.toLowerCase()],
-  })));
+    const adminHash = await bcrypt.hash("Admin1234!", 12);
+    const customerHash = await bcrypt.hash("Customer1234!", 12);
+    const admin = await User.create({ name: "Admin", email: "admin@dtank-kicks.com", passwordHash: adminHash, role: "admin" });
+    const c1 = await User.create({ name: "Marco Santos", email: "marco@example.com", passwordHash: customerHash, phone: "+639171234567" });
+    const c2 = await User.create({ name: "Jenny Lopez", email: "jen@example.com", passwordHash: customerHash, phone: "+639179876543" });
+    const c3 = await User.create({ name: "Maria Lopez", email: "maria@example.com", passwordHash: customerHash, phone: "+639179876857" });
+
+  const created = await Product.insertMany(
+    products.map(([brand, category, name, price, colors], i) => ({
+      name,
+      brand,
+      category,
+      description: "Premium engineered upper, cushioned midsole, durable rubber outsole.",
+      images: [img(photos[i % photos.length]), img(photos[(i + 3) % photos.length]), img(photos[(i + 7) % photos.length])],
+      variants: makeVariants(colors, price, brand, name),
+      rating: 3.8 + ((i * 13) % 12) / 10, reviewCount: 12 + (i * 7) % 240,
+      tags: [category.toLowerCase(), brand.toLowerCase()],
+    }))
+  );
+
+  // ─────────────────────────────────────────────
+  // 🛒 CART SEED (schema-compliant)
+  // ─────────────────────────────────────────────
+
+  const sampleProduct = created[0];
+  const sampleVariant = sampleProduct.variants[0];
+
+  await Cart.create({
+    user: c1._id,
+    items: [
+      {
+        id: `${sampleProduct._id}-${sampleVariant._id}`,
+        productId: sampleProduct._id,
+        variantId: sampleVariant._id,
+        name: sampleProduct.name,
+        brand: sampleProduct.brand,
+        image: sampleProduct.images[0],
+        quantity: 1,
+        priceAtAdd: sampleVariant.price,
+      },
+    ],
+  });
 
   const order1 = await Order.create({
-    user: c1._id,
-    items: [{ product: created[0]._id, name: created[0].name, brand: created[0].brand, image: created[0].images[0], size: 9, color: "Black", quantity: 1, price: created[0].price }],
-    shippingAddress: { name: c1.name, line1: "123 Bonifacio Ave", city: "Taguig", province: "Metro Manila", postalCode: "1630", country: "Philippines", phone: c1.phone },
-    deliveryMethod: "standard", paymentStatus: "paid", fulfillmentStatus: "delivered",
-    subtotal: created[0].price, shipping: 0, tax: Math.round(created[0].price * 0.12), total: created[0].price + Math.round(created[0].price * 0.12),
-  });
-  const order2 = await Order.create({
-    user: c2._id,
-    items: [{ product: created[5]._id, name: created[5].name, brand: created[5].brand, image: created[5].images[0], size: 7, color: "White", quantity: 2, price: created[5].price }],
-    shippingAddress: { name: c2.name, line1: "456 Quezon Blvd", city: "Quezon City", province: "Metro Manila", postalCode: "1100", country: "Philippines", phone: c2.phone },
-    deliveryMethod: "express", paymentStatus: "paid", fulfillmentStatus: "shipped",
-    subtotal: created[5].price * 2, shipping: 350, tax: Math.round(created[5].price * 2 * 0.12), total: created[5].price * 2 + 350 + Math.round(created[5].price * 2 * 0.12),
-    trackingNumber: "LBC987654321", carrier: "LBC Express",
-  });
-
-  // Reviews from customers for products they purchased (verified)
-  const reviewsData = [
-    {
-      product: created[0]._id, user: c1._id, rating: 5,
-      title: "Best daily sneaker I've owned",
-      body: "Fits true to size and feels broken-in from day one. Cushioning is unreal for long city walks. Already eyeing another colorway.",
-      verifiedPurchase: true,
-    },
-    {
-      product: created[0]._id, user: c2._id, rating: 4,
-      title: "Stylish and comfortable",
-      body: "Looks even better in person. Took half a day to break in, but now they're my go-to pair. Knocking one star for the laces feeling a bit cheap.",
-      verifiedPurchase: false,
-    },
-    {
-      product: created[5]._id, user: c2._id, rating: 5,
-      title: "Classic Chucks, perfectly done",
-      body: "The Hi version sits great on the ankle and the canvas feels premium. Pairs with everything in my closet. Bought two and gifted one.",
-      verifiedPurchase: true,
-    },
-    {
-      product: created[5]._id, user: c1._id, rating: 4,
-      title: "Solid build, runs slightly large",
-      body: "Quality stitching and durable sole. I'd recommend going half a size down if you're between sizes. Otherwise a great pickup.",
-      verifiedPurchase: false,
-    },
-    {
-      product: created[1]._id, user: c1._id, rating: 5,
-      title: "Boost is addictive",
-      body: "Incredibly responsive on runs and casual enough for jeans. Worth every peso.",
-      verifiedPurchase: false,
-    },
-    {
-      product: created[3]._id, user: c2._id, rating: 4,
-      title: "Heritage feel, modern comfort",
-      body: "The 990v6 lives up to the hype. Suede is plush and the midsole soaks up impact nicely. Slightly heavy but I don't mind.",
-      verifiedPurchase: false,
-    },
-  ];
-  const insertedReviews = await Review.insertMany(reviewsData);
-
-  // Recompute product rating + reviewCount from inserted reviews
-  const productIds = [...new Set(insertedReviews.map((r) => String(r.product)))];
-  for (const pid of productIds) {
-    const productReviews = insertedReviews.filter((r) => String(r.product) === pid);
-    const avg = productReviews.reduce((s, r) => s + r.rating, 0) / productReviews.length;
-    await Product.findByIdAndUpdate(pid, { rating: avg, reviewCount: productReviews.length });
+      user: c1._id,
+      items: [{ product: created[0]._id, name: created[0].name, brand: created[0].brand, image: created[0].images[0], size: 9, color: "Black", quantity: 1, price: created[0].variants[0].price }],
+      shippingAddress: { name: c1.name, line1: "123 Bonifacio Ave", city: "Taguig", province: "Metro Manila", postalCode: "1630", country: "Philippines", phone: c1.phone },
+      deliveryMethod: "standard", paymentStatus: "paid", fulfillmentStatus: "delivered",
+      subtotal: created[0].variants[0].price, shipping: 0, tax: Math.round(created[0].variants[0].price * 0.12), total: created[0].variants[0].price + Math.round(created[0].variants[0].price * 0.12),
+    });
+    const order2 = await Order.create({
+      user: c2._id,
+      items: [{ product: created[5]._id, name: created[5].name, brand: created[5].brand, image: created[5].images[0], size: 7, color: "White", quantity: 2, price: created[5].variants[0].price }],
+      shippingAddress: { name: c2.name, line1: "456 Quezon Blvd", city: "Quezon City", province: "Metro Manila", postalCode: "1100", country: "Philippines", phone: c2.phone },
+      deliveryMethod: "express", paymentStatus: "paid", fulfillmentStatus: "shipped",
+      subtotal: created[5].variants[0].price * 2, shipping: 350, tax: Math.round(created[5].variants[0].price * 2 * 0.12), total: created[5].variants[0].price * 2 + 350 + Math.round(created[5].variants[0].price * 2 * 0.12),
+      trackingNumber: "LBC987654321", carrier: "LBC Express",
+    });
+  
+    // Reviews from customers for products they purchased (verified)
+    const reviewsData = [
+      {
+        product: created[0]._id, user: c1._id, rating: 5,
+        title: "Best daily sneaker I've owned",
+        body: "Fits true to size and feels broken-in from day one. Cushioning is unreal for long city walks. Already eyeing another colorway.",
+        verifiedPurchase: true,
+      },
+      {
+        product: created[0]._id, user: c2._id, rating: 4,
+        title: "Stylish and comfortable",
+        body: "Looks even better in person. Took half a day to break in, but now they're my go-to pair. Knocking one star for the laces feeling a bit cheap.",
+        verifiedPurchase: false,
+      },
+      {
+        product: created[5]._id, user: c2._id, rating: 5,
+        title: "Classic Chucks, perfectly done",
+        body: "The Hi version sits great on the ankle and the canvas feels premium. Pairs with everything in my closet. Bought two and gifted one.",
+        verifiedPurchase: true,
+      },
+      {
+        product: created[5]._id, user: c1._id, rating: 4,
+        title: "Solid build, runs slightly large",
+        body: "Quality stitching and durable sole. I'd recommend going half a size down if you're between sizes. Otherwise a great pickup.",
+        verifiedPurchase: false,
+      },
+      {
+        product: created[1]._id, user: c1._id, rating: 5,
+        title: "Boost is addictive",
+        body: "Incredibly responsive on runs and casual enough for jeans. Worth every peso.",
+        verifiedPurchase: true,
+      },
+      {
+        product: created[3]._id, user: c2._id, rating: 4,
+        title: "Heritage feel, modern comfort",
+        body: "The 990v6 lives up to the hype. Suede is plush and the midsole soaks up impact nicely. Slightly heavy but I don't mind.",
+        verifiedPurchase: false,
+      },
+    ];
+    const insertedReviews = await Review.insertMany(reviewsData);
+  
+    // Recompute product rating + reviewCount from inserted reviews
+    const productIds = [...new Set(insertedReviews.map((r) => String(r.product)))];
+    for (const pid of productIds) {
+      const productReviews = insertedReviews.filter((r) => String(r.product) === pid);
+      const avg = productReviews.reduce((s, r) => s + r.rating, 0) / productReviews.length;
+      await Product.findByIdAndUpdate(pid, { rating: avg, reviewCount: productReviews.length });
+    }
+  
+    console.log(`✅ Seed complete: 1 admin, 3 customers, ${created.length} products, 2 orders, ${insertedReviews.length} reviews`);
+    process.exit(0);
   }
-
-  console.log(`✅ Seed complete: 1 admin, 2 customers, ${created.length} products, 2 orders, ${insertedReviews.length} reviews`);
-  process.exit(0);
-}
-run().catch((e) => { console.error(e); process.exit(1); });
+  run().catch((e) => { console.error(e); process.exit(1); });
+  

@@ -3,7 +3,8 @@
 
 import type { Product, Review, Variant, Color, SizeStock } from "./types";
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "";
+// Determine API base URL from environment variable, with a fallback for server-side rendering
+const API_BASE = typeof window === "undefined" ? (import.meta as any).env?.VITE_API_URL || "http://localhost:4000" : "";
 
 
 export interface ProductsParams {
@@ -68,19 +69,33 @@ function deriveColors(variants: Variant[]): Color[] {
 
 // Normalize raw product data from the API into our frontend Product type
 export function normalizeProduct(raw: any): Product {
-  const variants: Variant[] = Array.isArray(raw?.variants) ? raw.variants : [];
+  const variants: Variant[] = Array.isArray(raw?.variants)
+    ? raw.variants.map((v: any) => ({
+        id: String(v._id ?? v.id),
+        size: Number(v.size),
+        color: v.color,
+        price: Number(v.price),
+        compareAtPrice:
+            v.compareAtPrice !== undefined
+            ? Number(v.compareAtPrice)
+            : undefined,
+        stock: Number(v.stock ?? 0),
+        }))
+    : [];
+
+
   return {
     id: String(raw?._id ?? raw?.id ?? ""),
     name: raw?.name ?? "",
     brand: raw?.brand,
     category: raw?.category,
     description: raw?.description ?? "",
-    price: Number(raw?.price ?? 0),
-    compareAtPrice: raw?.compareAtPrice,
     images: Array.isArray(raw?.images) ? raw.images : [],
     variants,
     sizes: deriveSizes(variants),
     colors: deriveColors(variants),
+    minPrice: variants.length > 0 ? Math.min(...variants.map(v => v.price)) : 0,
+    maxPrice: variants.length > 0 ? Math.max(...variants.map(v => v.price)) : 0,
     rating: Number(raw?.rating ?? 0),
     reviewCount: Number(raw?.reviewCount ?? 0),
     tags: Array.isArray(raw?.tags) ? raw.tags : [],
@@ -96,7 +111,7 @@ export async function fetchProducts(params: ProductsParams = {}): Promise<Produc
     if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
   }
   const data = await request<any>(`/api/products${qs.toString() ? `?${qs}` : ""}`);
-  
+
   return {
     items: (data?.items ?? []).map(normalizeProduct),
     total: Number(data?.total ?? 0),
@@ -107,7 +122,10 @@ export async function fetchProducts(params: ProductsParams = {}): Promise<Produc
 
 // Fetch a single product by its ID — used for product details page
 export async function fetchProductById(id: string): Promise<Product> {
-  const raw = await request<any>(`/api/products/${encodeURIComponent(id)}`);
+  if (!id || !/^[a-f0-9]{24}$/i.test(id)) {
+    throw new Error("Invalid product id");
+  }
+  const raw = await request<Product>(`/api/products/${encodeURIComponent(id)}`);
   return normalizeProduct(raw);
 }
 
@@ -169,19 +187,19 @@ export async function fetchReviews(productId: string, page = 1, limit = 10): Pro
   query.set("page", String(page));
   query.set("limit", String(limit));
 
-  const data = await request<any>(`/api/products/${encodeURIComponent(productId)}/reviews?${query}`);
-  return (data?.items ?? []).map(normalizeReview);
+  return request<ReviewsResponse>(`/api/products/${productId}/reviews?${query}`);
+  
 }
 
 
 // Create a new review for a product — called from the review form on the product details page
-export async function createReview( productId: string, data: FormData, token?: string): Promise<Review> {
+export async function createReview(data: FormData, token?: string): Promise<Review> {
   const headers: Record<string, string> = {};
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  // const productId = data.get("product");
+  const productId = data.get("product");
 
   const res = await fetch(`${API_BASE}/api/products/${productId}/reviews`, {
     method: "POST",

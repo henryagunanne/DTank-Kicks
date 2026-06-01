@@ -3,7 +3,8 @@
 
 import type { Product } from "./types";
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "";
+// Determine API base URL from environment variable, with a fallback for server-side rendering
+const API_BASE = typeof window === "undefined" ? (import.meta as any).env?.VITE_API_URL || "http://localhost:4000" : "";
 
 // These functions send FormData with multipart encoding to handle file uploads (product images).
 export async function createProduct(formData: FormData, token: string | null): Promise<Product> {

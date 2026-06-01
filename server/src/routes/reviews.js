@@ -35,24 +35,31 @@ router.post("/:id/reviews",
   body("body").trim().isLength({ min: 1, max: 1000 }),
   validate,
   async (req, res) => {
-    const verified = !!(await Order.findOne({ user: req.user._id, "items.product": req.params.id }));
-    const images = (req.files || []).map((f) => `/uploads/reviews/${f.filename}`);
-    const review = await Review.create({
-      product: req.params.id, 
-      user: req.user._id,
-      rating: Number(req.body.rating), 
-      title: req.body.title, 
-      body: req.body.body,
-      images, 
-      verifiedPurchase: verified,
-    });
-    // refresh product rating
-    const agg = await Review.aggregate([
-      { $match: { product: review.product } },
-      { $group: { _id: "$product", avg: { $avg: "$rating" }, count: { $sum: 1 } } },
-    ]);
-    if (agg[0]) await Product.findByIdAndUpdate(req.params.id, { rating: agg[0].avg, reviewCount: agg[0].count });
-    res.status(201).json(review);
+    try {
+      const verified = !!(await Order.findOne({ user: req.user._id, "items.product": req.params.id }));
+      const images = (req.files || []).map((f) => `/uploads/reviews/${f.filename}`);
+
+      const review = await Review.create({
+        product: req.params.id, 
+        user: req.user._id,
+        rating: Number(req.body.rating), 
+        title: req.body.title, 
+        body: req.body.body,
+        images, 
+        verifiedPurchase: verified,
+      });
+
+      // refresh product rating
+      const agg = await Review.aggregate([
+        { $match: { product: review.product } },
+        { $group: { _id: "$product", avg: { $avg: "$rating" }, count: { $sum: 1 } } },
+      ]);
+
+      if (agg[0]) await Product.findByIdAndUpdate(req.params.id, { rating: agg[0].avg, reviewCount: agg[0].count });
+      res.status(201).json(review);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
   }
 );
 

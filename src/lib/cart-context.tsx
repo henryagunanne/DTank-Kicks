@@ -1,3 +1,8 @@
+// The CartProvider component manages the shopping cart state and synchronizes it 
+// between localStorage (for guests) and the server (for authenticated users). 
+// It uses React Query to handle data fetching and mutations, providing a seamless experience 
+// for both guest and logged-in users. The useCart hook allows components to easily access cart functionality throughout the application.
+
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CartItem } from "./types";
@@ -16,9 +21,10 @@ interface CartCtx {
 }
 
 const Ctx = createContext<CartCtx | null>(null);
-const KEY = "solestore_cart_v1";
+const KEY = "dtank-kicks_cart_v1";
 const CART_QK = ["cart"] as const;
 
+// Local cart management for guests. We store an array of CartItems in localStorage under the KEY.
 function readLocal(): CartItem[] {
   try {
     const raw = localStorage.getItem(KEY);
@@ -28,26 +34,31 @@ function readLocal(): CartItem[] {
   }
 }
 
+// For guests, we store the cart in localStorage. For authenticated users, we sync with the server.
 function writeLocal(items: CartItem[]) {
   try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
 }
 
+// Clear localStorage cart (e.g. after merging with server on login)
 function clearLocal() {
   try { localStorage.removeItem(KEY); } catch {}
 }
 
-function lineMatches(a: Pick<CartItem, "productId" | "size" | "color">, b: Pick<CartItem, "productId" | "size" | "color">) {
-  return a.productId === b.productId && a.size === b.size && a.color === b.color;
+// Determine if two cart items represent the same line (same product, size, and color)
+function lineMatches(a: Pick<CartItem, "productId" | "variantId" | "priceAtAdd">, b: Pick<CartItem, "productId" | "variantId" | "priceAtAdd">) {
+  return a.productId === b.productId && a.variantId === b.variantId;
 }
 
+// Calculate total items and price for a given array of cart items
 function totals(items: CartItem[]): ServerCart {
   return {
     items,
     totalItems: items.reduce((s, i) => s + i.quantity, 0),
-    totalPrice: items.reduce((s, i) => s + i.price * i.quantity, 0),
+    totalPrice: items.reduce((s, i) => s + i.priceAtAdd * i.quantity, 0),
   };
 }
 
+// The CartProvider component wraps the application and provides cart state and functions to its children via context.
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user, accessToken } = useAuth();
   const qc = useQueryClient();
@@ -91,6 +102,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (!isAuthed) writeLocal(cart.items);
   }, [cart.items, isAuthed]);
 
+  // Helper to update local cache immediately for a better UX, while the mutations sync with the server in the background.
   const setLocalCart = useCallback((updater: (items: CartItem[]) => CartItem[]) => {
     qc.setQueryData<ServerCart>(CART_QK, (prev) => {
       const next = updater(prev?.items ?? []);
@@ -98,6 +110,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   }, [qc]);
 
+  // Mutations for adding/updating and removing items. 
+  // On success, they update the cache with the server response. On error, they invalidate the cache to refetch fresh data.
   const addMutation = useMutation({
     mutationFn: (item: CartItem) => addOrUpdateItem(item, accessToken),
     onSuccess: (data) => qc.setQueryData(CART_QK, data),
@@ -110,6 +124,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     onError: () => qc.invalidateQueries({ queryKey: CART_QK }),
   });
 
+  // Cart manipulation functions that update local state immediately and then call the appropriate mutation for authenticated users.
   const add: CartCtx["add"] = (item) => {
     let newLine: CartItem | null = null;
     setLocalCart((items) => {
@@ -117,7 +132,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (match) {
         return items.map((p) => p.id === match.id ? { ...p, quantity: p.quantity + item.quantity } : p);
       }
-      newLine = { ...item, id: crypto.randomUUID() };
+      newLine = { ...item, id: crypto.randomUUID() };   // generate a temporary ID for the new line item; the server will return the real ID on addOrUpdateItem
       return [...items, newLine];
     });
     if (isAuthed) {

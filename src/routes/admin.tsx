@@ -311,7 +311,7 @@ function ProductsTab() {
                 <h4 className="font-bold">Variants</h4>
 
                 {variants.map((v, i) => (
-                  <div key={i} className="grid grid-cols-4 gap-2">
+                  <div key={i} className="grid grid-cols-1 md:grid-cols-6 gap-2">
                     <input aria-label="Size" placeholder="Size" type="number"
                       onChange={(e) => {
                         const next = [...variants];

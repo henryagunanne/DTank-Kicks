@@ -72,7 +72,7 @@ function CartPage() {
                     <span className="w-8 text-center text-sm font-semibold">{it.quantity}</span>
                     <button aria-label="Increase quantity" onClick={() => updateQty(it.id, it.quantity + 1)} className="p-2"><Plus className="h-3.5 w-3.5" /></button>
                   </div>
-                  <div className="font-bold">{peso(it.price * it.quantity)}</div>
+                  <div className="font-bold">{peso(it.priceAtAdd * it.quantity)}</div>
                 </div>
               </div>
             </div>

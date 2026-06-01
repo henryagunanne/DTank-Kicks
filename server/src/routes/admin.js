@@ -22,50 +22,76 @@ router.get("/dashboard", authenticate, requireAdmin, async (req, res) => {
       });
 
       const revenue30d = orders.reduce(
-        (sum, order) => sum + order.total,
+        (sum, order) => sum + (order.total || 0),
         0
       );
 
       const totalOrders = await Order.countDocuments();
 
-      const customers = await User.countDocuments({role: "customer",});
+      const customers = await User.countDocuments({role: "customer"});
 
       const products = await Product.find();
 
-      const lowStock = products.filter((p) => {
-        const stock = p.sizes.reduce(
-          (sum, s) => sum + s.stock,
-          0
-        );
+      // Count low stock products (total stock across all variants <= 5)
+      const lowStock = products.filter(product =>
+        (product.variants || []).some(
+            variant => variant.stock <= 5
+        )
+      ).length;
 
-        return stock <= 5;
-      }).length;
+      // Revenue chart data for the last 30 days
+      const revenueChartRaw = await Order.aggregate([
+        {
+            $match: {
+            createdAt: {
+                $gte: thirtyDaysAgo,
+            },
+            },
+        },
+        {
+            $group: {
+            _id: {
+                $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$createdAt",
+                },
+            },
+            revenue: {
+                $sum: "$total",
+            },
+            },
+        },
+        {
+            $sort: {
+            _id: 1,
+            },
+        },
+      ]);
 
-      const revenueChart = [];
 
-      for (let i = 29; i >= 0; i--) {
-        const dayStart = new Date();
-        dayStart.setHours(0, 0, 0, 0);
-        dayStart.setDate(dayStart.getDate() - i);
+      const revenueMap = new Map(
+        revenueChartRaw.map(item => [
+            item._id,
+            item.revenue,
+        ])
+      );
 
-        const dayEnd = new Date(dayStart);
-        dayEnd.setDate(dayEnd.getDate() + 1);
+        const revenueChart = [];
 
-        const dayOrders = await Order.find({
-          createdAt: {
-            $gte: dayStart,
-            $lt: dayEnd,
-          },
-        });
+        for (let i = 29; i >= 0; i--) {
+            const day = new Date();
+            day.setHours(0, 0, 0, 0);
+            day.setDate(day.getDate() - i);
 
-        revenueChart.push({
-          day: dayStart.getDate(),
-          revenue: dayOrders.reduce(
-            (sum, o) => sum + o.total,
-            0
-          ),
-        });
-      }
+            const key = day.toISOString().slice(0, 10);
+
+            revenueChart.push({
+                day: day.getDate(),
+                revenue: revenueMap.get(key) || 0,
+            });
+        }
+
+        const totalProducts = await Product.countDocuments();
 
       res.json({
         revenue30d,
@@ -73,6 +99,7 @@ router.get("/dashboard", authenticate, requireAdmin, async (req, res) => {
         customers,
         lowStock,
         revenueChart,
+        totalProducts,
       });
     } catch (err) {
       console.error(err);

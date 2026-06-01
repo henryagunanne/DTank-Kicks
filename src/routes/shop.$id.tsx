@@ -20,6 +20,8 @@ import { WishlistableCard } from "@/components/site/ProductCard";
 import { pushRecent, useRecent } from "@/lib/recently-viewed";
 import { StarInput } from "@/components/site/StarInput";
 
+const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "http://localhost:4000";
+
 export const Route = createFileRoute("/shop/$id")({
   loader: async ({ params }) => {
     const product = await fetchProductById(params.id);
@@ -33,7 +35,7 @@ export const Route = createFileRoute("/shop/$id")({
           { title: `${loaderData.product.brand} ${loaderData.product.name} — DTank-Kicks` },
           { name: "description", content: loaderData.product.description.slice(0, 155) },
           { property: "og:title", content: `${loaderData.product.brand} ${loaderData.product.name}` },
-          { property: "og:image", content: loaderData.product.images[0] },
+          { property: "og:image", content: loaderData.product.images[0] ?? "" },
         ]
       : [{ title: "Product — DTank-Kicks" }],
   }),
@@ -45,11 +47,19 @@ function ProductPage() {
   const { user } = useAuth();
   const { has, toggle } = useWishlist();
   const [imageIdx, setImageIdx] = useState(0);
-  const [color, setColor] = useState(product.colors[0].name);
-  const [size, setSize] = useState<number | null>(null);
+  const [selectedColor, setSelectedColor] = useState(product.colors[0]?.name ?? "");
+  const [selectedSize, setSelectedSize] = useState<number | null>(null);
   const [qty, setQty] = useState(1);
   const [tab, setTab] = useState<"desc" | "size" | "ship" | "rev">("desc");
 
+  // Determine the currently selected variant based on the selected color and size. 
+  // This is used to display the correct price and check stock availability.
+  const selectedVariant = product.variants.find(v => v.color.name === selectedColor && v.size === selectedSize);
+
+  // Get available sizes for the currently selected color to disable unavailable options in the size selector.
+  const availableSizes = product.variants.filter( v => v.color.name === selectedColor);
+
+  // Whenever the product changes (i.e. when navigating to a different product page), we push it to the recently viewed list in localStorage.
   useEffect(() => { pushRecent(product); }, [product]);
 
   // Fetch reviews for this product. We show the first 10 reviews here and link to a separate reviews page if there are more.
@@ -62,6 +72,7 @@ function ProductPage() {
   const reviews = reviewData?.items ?? [];
   const reviewTotal = reviewData?.total ?? product.reviewCount;
 
+  // Fetch related products from the same category to show in the "You may also like" section. We exclude the current product from this list.
   const { data: relatedData = { items: [] } } = useQuery({
     queryKey: ["related-products", product.category],
     queryFn: () => fetchProducts({ category: product.category, limit: 8, sort: "newest" }),
@@ -71,6 +82,7 @@ function ProductPage() {
 
   const related = relatedData.items.filter((p) => p.id !== product.id).slice(0, 4);
 
+  // Fetch recently viewed products, excluding the current product. This is stored in localStorage and managed via the useRecent hook.
   const recentIds = useRecent().filter((id) => id !== product.id);
   const { data: recent = [] } = useQuery({
     queryKey: ["recent-products", recentIds],
@@ -82,9 +94,10 @@ function ProductPage() {
   const wished = user ? has(product.id) : false;
 
   const onAdd = () => {
-    if (!size) { toast.error("Please select a size"); return; }
-    add({ productId: product.id, name: product.name, brand: product.brand, image: product.images[0], size, color, quantity: qty, price: product.price });
-    toast.success(`${product.name} (UK ${size}) added to cart`);
+    if (!selectedSize) { toast.error("Please select a size"); return; }
+    if (!selectedVariant) { toast.error("Selected variant is unavailable"); return; }
+    add({ productId: product.id, variantId: selectedVariant.id, name: product.name, brand: product.brand, image: product.images[0], quantity: qty, priceAtAdd: selectedVariant.price, size: selectedVariant.size, color: selectedVariant.color.name });
+    toast.success(`${product.name} (UK ${selectedSize}) added to cart`);
   };
 
   return (
@@ -125,16 +138,18 @@ function ProductPage() {
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-3">
-            <span className="text-3xl font-black">{peso(product.price)}</span>
-            {product.compareAtPrice && <span className="text-lg text-muted-foreground line-through">{peso(product.compareAtPrice)}</span>}
+            <span className="text-3xl font-black">
+              {selectedVariant ? peso(selectedVariant.price) : peso(Math.min(...product.variants.map(v => v.price)))}   
+              </span>
+            {selectedVariant?.compareAtPrice && <span className="text-lg text-muted-foreground line-through">{peso(selectedVariant.compareAtPrice)}</span>}
           </div>
 
           <div className="mt-7">
-            <div className="mb-2 text-xs font-bold uppercase tracking-widest">Color: <span className="text-muted-foreground">{color}</span></div>
+            <div className="mb-2 text-xs font-bold uppercase tracking-widest">Color: <span className="text-muted-foreground">{selectedColor}</span></div>
             <div className="flex gap-2">
               {product.colors.map((c) => (
-                <button key={c.name} title={c.name} aria-label={`Select ${c.name}`} onClick={() => setColor(c.name)}
-                  className={`h-9 w-9 rounded-full border-2 p-0 ${color === c.name ? "border-gold ring-2 ring-gold/40" : "border-border"}`}>
+                <button key={c.name} title={c.name} aria-label={`Select ${c.name}`} onClick={() => setSelectedColor(c.name)}
+                  className={`h-9 w-9 rounded-full border-2 p-0 ${selectedColor === c.name ? "border-gold ring-2 ring-gold/40" : "border-border"}`}>
                   <svg className="h-9 w-9 rounded-full" viewBox="0 0 24 24" role="img" aria-label={c.name}>
                     <circle cx="12" cy="12" r="12" fill={c.hex} />
                   </svg>
@@ -149,18 +164,14 @@ function ProductPage() {
               <SizeGuideButton />
             </div>
             <div className="grid grid-cols-6 gap-2">
-              {product.sizes.map((s) => {
-                const oos = s.stock === 0;
-                return (
-                  <button key={s.size} disabled={oos} onClick={() => setSize(s.size)}
-                    className={`h-12 rounded-md border text-sm font-semibold ${
-                      size === s.size ? "border-gold bg-gold text-gold-foreground"
-                      : oos ? "cursor-not-allowed border-border text-muted-foreground line-through opacity-50"
+              {availableSizes.map(v => (
+                  <button key={v.size} disabled={v.stock === 0} onClick={() => setSelectedSize(v.size)}
+                    className={`h-12 rounded-md border text-sm font-semibold ${selectedSize === v.size ? "border-gold bg-gold text-gold-foreground"
+                      : v.stock === 0 ? "cursor-not-allowed border-border text-muted-foreground line-through opacity-50"
                       : "border-border hover:border-gold"}`}>
-                    {s.size}
+                    {v.size}
                   </button>
-                );
-              })}
+              ))}
             </div>
           </div>
 
@@ -271,14 +282,8 @@ function ProductPage() {
                               const getImageSrc = (path: string) => {
                                 // already absolute URL
                                 if (path.startsWith("http")) return path;
-
-                                // normalize multer paths like "uploads/x.jpg"
-                                if (path.startsWith("/uploads")) return path;
-
-                                if (path.startsWith("uploads")) return `/${path}`;
-
-                                // fallback (if backend serves via /uploads)
-                                return `/uploads/${path}`;
+                                // if the path is relative, we prefix it with the API base URL
+                                return `${API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
                               };
 
                               return (
@@ -354,7 +359,7 @@ function ReviewForm({ productId }: { productId: string }) {
   // We use a mutation here because we're sending a POST request to create a new review, 
   // and we want to handle the loading and error states of that request.
   const mutation = useMutation({
-    mutationFn: (data: FormData) => createReview(productId, data, accessToken ?? undefined),
+    mutationFn: (data: FormData) => createReview(data, accessToken ?? undefined),
     onSuccess: () => {
       toast.success("Review submitted");
 
@@ -381,7 +386,7 @@ function ReviewForm({ productId }: { productId: string }) {
 
     const formData = new FormData();
 
-    // formData.append("product", productId); -- IGNORE -- we can get productId from the URL in the API route, no need to send it from the client
+    formData.append("product", productId);
     formData.append("rating", String(rating));
     formData.append("title", title);
     formData.append("body", body);
@@ -397,7 +402,7 @@ function ReviewForm({ productId }: { productId: string }) {
   return (
     <form onSubmit={onSubmit} className="rounded-xl border border-border p-5">
       <h3 className="text-sm font-bold text-foreground">Write a review</h3>
-      <div className="mt-3 text-xs text-muted-foreground">Hover to rate`</div>
+      <div className="mt-3 text-xs text-muted-foreground">You must be logged in to submit a review</div>
       <div className="mt-3"><StarInput value={rating} onChange={setRating} /></div>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" required maxLength={100} className="mt-3 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" />
       <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Your review..." required maxLength={1000} rows={4} className="mt-2 w-full rounded-md border border-input bg-background p-3 text-sm" />

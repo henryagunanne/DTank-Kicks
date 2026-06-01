@@ -9,7 +9,15 @@ export type Brand = "Nike" | "Adidas" | "Puma" | "New Balance" | "Vans" | "Conve
 
 export interface SizeStock { size: number; stock: number; }
 export interface Color { name: string; hex: string; }
-export interface Variant { size: number; color: Color; stock: number; }
+export interface Variant {
+  id: string;
+  size: number;
+  color: Color;
+  price: number;
+  compareAtPrice?: number;
+  stock: number;
+}
+
 
 export interface Product {
   id: string;
@@ -17,12 +25,12 @@ export interface Product {
   brand: Brand;
   category: Category;
   description: string;
-  price: number;
-  compareAtPrice?: number;
   images: string[];
   variants: Variant[];
   sizes: SizeStock[];
   colors: Color[];
+  minPrice: number;
+  maxPrice: number;
   rating: number;
   reviewCount: number;
   tags: string[];
@@ -30,15 +38,16 @@ export interface Product {
 }
 
 export interface CartItem {
-  id: string; // line id
+  id: string;
   productId: string;
+  variantId: string;
   name: string;
   brand: string;
   image: string;
+  quantity: number;
+  priceAtAdd: number;
   size: number;
   color: string;
-  quantity: number;
-  price: number;
 }
 
 export interface Review {

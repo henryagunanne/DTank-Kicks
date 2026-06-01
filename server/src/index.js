@@ -36,7 +36,7 @@ app.use(morgan("dev"));
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads"))); // Serve uploaded images
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.get("/api/health", (_req, res) => res.json({ ok: true }));  // Health check endpoint
 
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
