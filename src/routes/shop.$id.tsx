@@ -100,6 +100,17 @@ function ProductPage() {
     toast.success(`${product.name} (UK ${selectedSize}) added to cart`);
   };
 
+  // Helper function to determine the correct image source URL, handling both absolute URLs and relative paths from the server
+  const getImageSrc = (img: string) => {
+    if (img.startsWith("http")) {
+      return img;
+    } else if (img.startsWith("/uploads")) {
+      return `${API_BASE}${img}`;
+    } else {
+      return img;
+    }
+  };
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <nav className="mb-6 flex items-center gap-1 text-xs text-muted-foreground">
@@ -113,14 +124,14 @@ function ProductPage() {
         {/* Gallery */}
         <div>
           <div className="hover-zoom group relative aspect-square overflow-hidden rounded-2xl bg-secondary">
-            <img src={product.images[imageIdx]} alt={product.name} className="h-full w-full object-cover" />
+            <img src={getImageSrc(product.images[imageIdx])} alt={product.name} className="h-full w-full object-cover" />
             <button className="absolute bottom-4 right-4 rounded-full bg-background/90 px-3 py-1.5 text-xs font-semibold shadow">360° View</button>
           </div>
           <div className="mt-4 grid grid-cols-4 gap-3">
             {product.images.map((src, i) => (
               <button key={i} aria-label={`View image ${i + 1}`} onClick={() => setImageIdx(i)}
                 className={`aspect-square overflow-hidden rounded-lg border-2 ${imageIdx === i ? "border-gold" : "border-transparent"}`}>
-                <img src={src} alt={`Thumbnail ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+                <img src={getImageSrc(src)} alt={`Thumbnail ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
               </button>
             ))}
           </div>
@@ -328,7 +339,9 @@ function ProductPage() {
       <section className="mt-16">
         <h2 className="mb-8 text-2xl font-black tracking-tight">You might also like</h2>
         <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-          {related.map((p) => <WishlistableCard key={p.id} product={p} />)}
+          {related.map((p) => (
+            <WishlistableCard key={p.id} product={p} />
+          ))}
         </div>
       </section>
 
@@ -336,7 +349,9 @@ function ProductPage() {
         <section className="mt-16">
           <h2 className="mb-8 text-2xl font-black tracking-tight">Recently viewed</h2>
           <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-            {recent.map((p) => <WishlistableCard key={p.id} product={p} />)}
+            {recent.map((p) => (
+              <WishlistableCard key={p.id} product={p} />
+            ))}
           </div>
         </section>
       )}

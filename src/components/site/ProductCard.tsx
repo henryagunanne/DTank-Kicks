@@ -8,6 +8,8 @@ import { useCart } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { useWishlist } from "@/lib/wishlist-context";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+
 export function ProductCard({ product }: { product: Product }) {
   const { add } = useCart();
   const [picker, setPicker] = useState(false);
@@ -19,10 +21,21 @@ export function ProductCard({ product }: { product: Product }) {
 
   if (!variant) return;
 
+  // Helper function to determine the correct image source URL, handling both absolute URLs and relative paths from the server
+  const getImageSrc = (img: string) => {
+    if (img.startsWith("http")) {
+      return img;
+    } else if (img.startsWith("/uploads")) {
+      return `${API_BASE}${img}`;
+    } else {
+      return img;
+    }
+  };
+
   return (
     <div className="group relative flex flex-col">
       <Link to="/shop/$id" params={{ id: product.id }} className="hover-zoom relative block aspect-square overflow-hidden rounded-xl bg-secondary">
-        <img src={product.images[0]} alt={product.name} loading="lazy" className="h-full w-full object-cover" />
+        <img src={getImageSrc(product.images[0])} alt={product.name} loading="lazy" className="h-full w-full object-cover" />
         {product.isNew && <span className="absolute left-3 top-3 rounded-full bg-gold px-2 py-1 text-[10px] font-bold uppercase text-gold-foreground">New</span>}
         {variant.compareAtPrice && <span className="absolute right-3 top-3 rounded-full bg-destructive px-2 py-1 text-[10px] font-bold text-destructive-foreground">Sale</span>}
       </Link>

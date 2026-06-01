@@ -168,8 +168,8 @@ router.put("/:id", authenticate, requireAdmin, upload.array("images", 6),
     if (!Array.isArray(variants)) throw new Error("Variants must be an array");
     for (const v of variants) {
       if (typeof v.size !== "number" || v.size <= 0) throw new Error("Variant size must be a positive number");
-      if (typeof v.colorName !== "string" || !v.colorName.trim()) throw new Error("Variant colorName is required");
-      if (typeof v.colorHex !== "string" || !/^#([0-9A-F]{3}){1,2}$/i.test(v.colorHex)) throw new Error("Variant colorHex must be a valid hex color");
+      if (typeof v.color.name !== "string" || !v.color.name.trim()) throw new Error("Variant colorName is required");
+      if (typeof v.color.hex !== "string" || !/^#([0-9A-F]{3}){1,2}$/i.test(v.color.hex)) throw new Error("Variant colorHex must be a valid hex color");
       if (typeof v.price !== "number" || v.price < 0) throw new Error("Variant price must be a non-negative number");
       if (v.compareAtPrice !== undefined && (typeof v.compareAtPrice !== "number" || v.compareAtPrice < 0)) throw new Error("Variant compareAtPrice must be a non-negative number");
       if (typeof v.stock !== "number" || v.stock < 0) throw new Error("Variant stock must be a non-negative number");

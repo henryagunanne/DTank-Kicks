@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";;
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 
@@ -238,7 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
 
-  const qc = useQueryClient();
+
   const logout: AuthCtx["logout"] = async () => {
     if (typeof window === "undefined" || !window.localStorage) {
       clear();
@@ -263,14 +262,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ignore network errors; still clear local state
     } finally {
       clear();
-
-      // After logging out, we want to clear any user-specific data from React Query cache
-      qc.removeQueries({ queryKey: ["cart"] }); 
-      qc.setQueryData(["cart"], {
-        items: [],
-        totalItems: 0,
-        totalPrice: 0,
-      });
     }
   };
 
