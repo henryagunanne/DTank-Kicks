@@ -121,6 +121,34 @@ function ProductsTab() {
     },
   ]);
 
+  const emptyVariant = {
+    size: "",
+    colorName: "",
+    colorHex: "#000000",
+    price: "",
+    compareAtPrice: "",
+    stock: "",
+  };
+
+  const resetForm = () => {
+    setEditingProduct(null);
+
+    setName("");
+    setBrand("");
+    setCategory("");
+    setDescription("");
+    setTags("");
+
+    setImages([]);
+
+    setVariants([emptyVariant]);
+  };
+
+  const closeModal = () => {
+    setShowAdd(false);
+    resetForm();
+  };
+
   const { data, isLoading } = useQuery({ 
     queryKey: ["admin-products"], 
     queryFn: () => fetchProducts({ limit: 1000,})
@@ -157,8 +185,7 @@ function ProductsTab() {
         ],
       });
 
-      setShowAdd(false);
-      setEditingProduct(null);
+      closeModal();
       toast.success("Product updated successfully");
     },
     onError: () => {
@@ -176,7 +203,7 @@ function ProductsTab() {
         queryKey: ["admin-products"],
       });
 
-      setShowAdd(false);
+      closeModal();
       toast.success("Product created successfully");
     },
     onError: () => {
@@ -186,7 +213,6 @@ function ProductsTab() {
 
   // Handler for creating a new product - gathers form data and calls the createProduct mutation
   const handleCreate = () => {
-    console.log("editingProduct", editingProduct);
     const formData = new FormData();
 
     formData.append("name", name);
@@ -226,7 +252,7 @@ function ProductsTab() {
   // When the user clicks "Edit" on a product, we populate the form with that product's data and show the modal. 
   // This allows the admin to easily update existing products.
   const openEdit = (p: Product) => {
-    setShowAdd(false);  // First close the modal to reset the form state, then after a short delay populate it with the product data and reopen it. This ensures that the form is properly reset when switching between products.
+    closeModal();  // First close the modal to reset the form state, then after a short delay populate it with the product data and reopen it. This ensures that the form is properly reset when switching between products.
 
     setEditingProduct(p);
 
@@ -282,7 +308,7 @@ function ProductsTab() {
       {/* HEADER with Add Product button */}
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-lg font-bold">Products ({products.length})</h3>
-        <button onClick={() => setShowAdd(true)} className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">+ Add Product</button>
+        <button onClick={() => { resetForm(); setShowAdd(true); }} className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">+ Add Product</button>
       </div>
 
       {/* TABLE */}
@@ -320,9 +346,9 @@ function ProductsTab() {
 
       {/* MODAL */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowAdd(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={closeModal}>
           <div onClick={(e) => e.stopPropagation()} className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-card p-6">
-            <h3 className="text-lg font-bold">Add Product</h3>
+            <h3 className="text-lg font-bold">{editingProduct ? "Edit Product" : "Add Product"}</h3>
             <form className="mt-4 grid gap-3 text-sm">
               <input value={name} placeholder="Name" onChange={(e) => setName(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3" />
               <input value={brand} placeholder="Brand" onChange={(e) => setBrand(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3" />
@@ -397,7 +423,7 @@ function ProductsTab() {
                 }} 
                />
               <div className="mt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setShowAdd(false)} className="rounded-md border border-border px-4 py-2">Cancel</button>
+                <button type="button" onClick={closeModal} className="rounded-md border border-border px-4 py-2">Cancel</button>
                 <button type="button" onClick={handleCreate} className="rounded-md bg-primary px-4 py-2 text-primary-foreground">Save</button>
               </div>
             </form>
@@ -407,6 +433,8 @@ function ProductsTab() {
     </div>
   );
 }
+
+
 
 function OrdersTab() {
   const {accessToken} = useAuth();
@@ -418,7 +446,7 @@ function OrdersTab() {
   });
 
   const updateStatus = useMutation({
-    mutationFn: (input: { orderId: string; status: string }) => updateOrderStatus(input.orderId, input.status, accessToken || ""),
+    mutationFn: (input: { orderId: string; status: string }) =>  updateOrderStatus(input.orderId, input.status, accessToken || ""),
 
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -427,6 +455,10 @@ function OrdersTab() {
 
       toast.success("Order status updated");
     },
+    onError: (err) => { 
+      console.error(err);
+      toast.error("Failed to update order status");
+    }
   });
 
   return (
@@ -449,12 +481,12 @@ function OrdersTab() {
               <td>
                 <select 
                   aria-label="Order Status" 
-                  defaultValue={order.status} 
+                  value={order.fulfillmentStatus} 
                   onChange={(e) => {
                     updateStatus.mutate({ 
                       orderId: order._id, 
                       status: e.target.value 
-                    })
+                    });
                   }} 
                   className="rounded-md border border-input bg-background px-2 py-1 text-xs"
                 >
@@ -472,6 +504,7 @@ function OrdersTab() {
     </div>
   );
 }
+
 
 function CustomersTab() {
   const { accessToken } = useAuth();

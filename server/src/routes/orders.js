@@ -20,7 +20,7 @@ router.post("/",
     const order = await Order.create({ ...req.body, user });
     if (req.body.guestEmail || req.body.shippingAddress?.email) {
       await sendEmail(req.body.guestEmail || req.body.shippingAddress.email,
-        `SoleStore order ${order._id} confirmed`,
+        `DTank-Kicks order ${order._id} confirmed`,
         `<h2>Thanks for your order!</h2><p>Your order #${order._id} has been received.</p>`);
     }
     res.status(201).json(order);
@@ -58,8 +58,13 @@ router.put("/:id/status", authenticate, requireAdmin,
   body("status").isIn(["placed", "processing", "shipped", "delivered", "cancelled"]),
   validate,
   async (req, res) => {
-    const order = await Order.findByIdAndUpdate(req.params.id, { fulfillmentStatus: req.body.status }, { new: true });
-    res.json(order);
+    try {
+      const order = await Order.findByIdAndUpdate(req.params.id, { fulfillmentStatus: req.body.status }, { new: true });
+      res.json(order);
+    } catch (err) {
+      console.error("Error updating order status", err);
+      res.status(500).json({ error: "Failed to update order status" });
+    }
   }
 );
 

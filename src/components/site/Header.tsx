@@ -18,6 +18,8 @@ import { fetchProducts } from "@/lib/product-api";
 import dtankDark from "@/assets/dtank-dark.svg";
 import dtankWhite from "@/assets/dtank-white.svg";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+
 export function Header() {
   const { count: cartCount } = useCart();
   const { dark, toggle } = useTheme();
@@ -50,6 +52,17 @@ export function Header() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // construct the image source depending on whether the image file starts with "http" or "/uploads" (indicating it's a local file that needs the API base URL prefixed)
+  const getImageSrc = (img: string) => {
+    if (img.startsWith("http")) {
+      return img;
+    } else if (img.startsWith("/uploads")) {
+      return `${API_BASE}${img}`;
+    } else {
+      return img;
+    }
+  };
 
 
   return (
@@ -104,7 +117,7 @@ export function Header() {
                     className="flex items-center gap-3 p-3 hover:bg-secondary"
                   >
                     <img
-                      src={s.images[0]}
+                      src={getImageSrc(s.images[0])}
                       alt={s.name}
                       loading="lazy"
                       className="h-10 w-10 rounded object-cover"

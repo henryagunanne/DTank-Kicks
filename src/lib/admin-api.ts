@@ -132,7 +132,7 @@ export async function fetchAllOrders(token: string): Promise<any[]> {
 
 // Update the status of an order (admin only) — used on the admin orders page to mark orders as shipped, delivered, etc.
 export async function updateOrderStatus(orderId: string, status: string, token: string): Promise<void> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
