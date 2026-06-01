@@ -27,7 +27,7 @@ const app = express();
 // Stripe webhook must receive raw body before json parser
 app.use("/api/payments/webhook", express.raw({ type: "application/json" }));
 
-app.use(helmet());
+app.use(helmet({crossOriginResourcePolicy: { policy: "cross-origin" }}));
 app.use(compression());
 app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:3000", credentials: true }));
 app.use(cookieParser());
@@ -54,7 +54,7 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 4000;
 if (process.env.NODE_ENV !== 'test') {
   connectDB().then(() => {
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0", () => {
       console.log(`API on http://localhost:${PORT}`);
     }).addListener("error", (err) => {
       console.error("Server error:", err);

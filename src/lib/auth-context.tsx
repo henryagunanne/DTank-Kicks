@@ -1,4 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";;
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+
 
 interface Address {
   label?: string;
@@ -44,9 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(
     () => {
       // During server-side rendering `window` and `sessionStorage` are undefined.
-      if (typeof window === "undefined" || !window.sessionStorage) return null;
+      if (typeof window === "undefined" || !window.localStorage) return null;
       try {
-        return sessionStorage.getItem(TOKEN_KEY);
+        return localStorage.getItem(TOKEN_KEY);
       } catch {
         return null;
       }
@@ -58,9 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const persist = (userData: User, token: string) => {
     setUser(userData);
     setAccessToken(token);
-    if (typeof window !== "undefined" && window.sessionStorage) {
+    if (typeof window !== "undefined" && window.localStorage) {
       try {
-        sessionStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem(TOKEN_KEY, token);
       } catch {
         // ignore storage errors
       }
@@ -71,9 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clear = () => {
     setUser(null);
     setAccessToken(null);
-    if (typeof window !== "undefined" && window.sessionStorage) {
+    if (typeof window !== "undefined" && window.localStorage) {
       try {
-        sessionStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(TOKEN_KEY);
       } catch {
         // ignore
       }
@@ -86,12 +88,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Your Express server uses httpOnly cookies for refresh tokens
   // so we ask /api/auth/me to tell us who's logged in
   useEffect(() => {
-    if (typeof window === "undefined" || !window.sessionStorage) {
+    if (typeof window === "undefined" || !window.localStorage) {
       setLoading(false);
       return;
     }
 
-    const token = sessionStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem(TOKEN_KEY);
 
     if (!token) {
       // No stored token — user is definitely not logged in
@@ -130,6 +132,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+
+  // ----------------------------
+  // Cross-tab syncing of auth state
+  // ----------------------------
+  useEffect(() => {
+    const syncAuth = (event: StorageEvent) => {
+      if (event.key !== TOKEN_KEY) return;
+
+      if (event.newValue) {
+        setAccessToken(event.newValue);
+
+        // re-fetch user in new tab
+        fetch("/api/auth/me", {
+          headers: { Authorization: `Bearer ${event.newValue}` },
+          credentials: "include",
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            setUser({
+              id: data.user.id || data.user._id,
+              name: data.user.name,
+              email: data.user.email,
+              role: data.user.role,
+              phone: data.user.phone,
+              addresses: data.user.addresses,
+            });
+          })
+          .catch(() => clear());
+      } else {
+        clear(); // logout from another tab
+      }
+    };
+
+    window.addEventListener("storage", syncAuth);
+    return () => window.removeEventListener("storage", syncAuth);
+  }, []);
+
+
+  // ----------------------------
+  // Auth actions
+  // ----------------------------
   const login: AuthCtx["login"] = async (email, password) => {
     try {
       const res = await fetch("/api/auth/login", {
@@ -160,6 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: "Could not reach the server. Is it running?" };
     }
   };
+
 
   const register: AuthCtx["register"] = async (name, email, password) => {
     try {
@@ -193,13 +237,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+
+  const qc = useQueryClient();
   const logout: AuthCtx["logout"] = async () => {
-    if (typeof window === "undefined" || !window.sessionStorage) {
+    if (typeof window === "undefined" || !window.localStorage) {
       clear();
       return;
     }
 
-    const token = sessionStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem(TOKEN_KEY);
 
     if (!token) {
       // No stored token — user is definitely not logged in
@@ -217,6 +263,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ignore network errors; still clear local state
     } finally {
       clear();
+
+      // After logging out, we want to clear any user-specific data from React Query cache
+      qc.removeQueries({ queryKey: ["cart"] }); 
+      qc.setQueryData(["cart"], {
+        items: [],
+        totalItems: 0,
+        totalPrice: 0,
+      });
     }
   };
 

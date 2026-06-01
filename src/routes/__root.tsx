@@ -49,6 +49,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <h1 className="text-xl font-semibold">Something went wrong</h1>
         <p className="mt-2 text-sm text-muted-foreground">Please try again.</p>
         <button onClick={() => { router.invalidate(); reset(); }} className="mt-4 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">Try again</button>
+        <button onClick={() => router.navigate({ to: "/" })} className="mt-4 ml-2 rounded-md bg-secondary px-4 py-2 text-sm text-secondary-foreground">Go Home</button>
       </div>
     </div>
   );

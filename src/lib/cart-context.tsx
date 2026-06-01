@@ -102,6 +102,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (!isAuthed) writeLocal(cart.items);
   }, [cart.items, isAuthed]);
 
+
+  // When the user logs out, we want to clear any user-specific cart data from the cache and reset to an empty guest cart.
+  useEffect(() => {
+    if (isAuthed) return;
+
+    // when user logs out → force reset cart
+    qc.setQueryData(CART_QK, {
+      items: [],
+      totalItems: 0,
+      totalPrice: 0,
+    });
+
+    // Clear user-specific cart data from cache on logout
+    qc.removeQueries({ queryKey: ["cart"] }); 
+
+    clearLocal();
+  }, [isAuthed, qc]);
+
   // Helper to update local cache immediately for a better UX, while the mutations sync with the server in the background.
   const setLocalCart = useCallback((updater: (items: CartItem[]) => CartItem[]) => {
     qc.setQueryData<ServerCart>(CART_QK, (prev) => {
