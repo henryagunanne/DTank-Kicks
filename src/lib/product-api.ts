@@ -220,6 +220,7 @@ export async function createReview(data: FormData, token?: string): Promise<Revi
 
 // ─── Wishlist ─────────────────────────────────────────────────────────────────
 // Fetch the user's wishlist items — returns full product objects, not just IDs
+// Normalizes each product to derive colors and sizes arrays from variants
 export async function fetchWishlist(token: string): Promise<Product[]> { 
   const headers: Record<string, string> = {};
   if (token) {
@@ -235,7 +236,9 @@ export async function fetchWishlist(token: string): Promise<Product[]> {
     throw new Error("Failed to fetch wishlist");
   }
 
-  return res.json();
+  const raw = await res.json();
+  // Normalize each product to derive colors and sizes from variants
+  return (Array.isArray(raw) ? raw : []).map(normalizeProduct);
 }
 
 export async function toggleWishlist( productId: string, token?: string): Promise<void> {
@@ -261,3 +264,24 @@ export async function toggleWishlist( productId: string, token?: string): Promis
 }
 
 
+
+// Update product variant stock on checkout - NOT IN USE ATM
+export async function updateStock(productId: string, variantId: string, quantity: number, token?: string): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}/api/products/${productId}/update-stock`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify({ variantId, quantity }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to update stock");
+  }
+
+  return res.json();
+}

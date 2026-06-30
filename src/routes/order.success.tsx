@@ -4,7 +4,7 @@ import { Check } from "lucide-react";
 export const Route = createFileRoute("/order/success")({
   validateSearch: (s: Record<string, unknown>) => ({ id: typeof s.id === "string" ? s.id : "SS-DEMO" }),
   component: SuccessPage,
-  head: () => ({ meta: [{ title: "Order Confirmed — SoleStore" }] }),
+  head: () => ({ meta: [{ title: "Order Confirmed — DTank-Kicks" }] }),
 });
 
 function SuccessPage() {

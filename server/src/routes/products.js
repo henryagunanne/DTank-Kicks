@@ -206,4 +206,31 @@ router.delete("/:id", authenticate, requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Upate stock of a product variant after an order is placed. This endpoint is called internally and is not exposed to clients.
+router.post("/:id/update-stock", authenticate, requireAdmin,
+  body("variantId").isString(),
+  body("quantity").isInt({ min: 1 }),
+  validate,
+  async (req, res) => {
+   
+    const upadate = await Product.updateOne(
+      {
+        _id: req.params.id,
+        "variants._id": req.body.variantId
+      },
+      {
+        $inc: {
+          "variants.$.stock": -req.body.quantity   // subtract stock
+        }
+      }
+    );
+
+    if (upadate.modifiedCount === 0) {
+      return res.status(404).json({ error: "Product or variant not found, or insufficient stock" });
+    }
+    
+    res.json({ ok: true });
+  }
+);
+
 module.exports = router;

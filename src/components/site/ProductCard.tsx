@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Star, Plus, Heart } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Product } from "@/lib/types";
 import { peso } from "@/lib/format";
@@ -12,14 +12,48 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000";
 
 export function ProductCard({ product }: { product: Product }) {
   const { add } = useCart();
+  const cardRef = useRef<HTMLDivElement>(null);
   const [picker, setPicker] = useState(false);
-  const avail = (product.sizes ?? []).filter((s) => s.stock > 0);
+  const [selectedColor, setSelectedColor] = useState(product.colors?.[0]?.name ?? "");
+  const [selectedSize, setSelectedSize] = useState<number | null>(null);
+
+
+  // const avail = (product.sizes ?? []).filter((s) => s.stock > 0);
   const colors = product.colors ?? [];
-  const variant = product.variants.find(
-    v => v.stock > 0
+  
+  const selectedVariant = product.variants.find(
+    v =>
+      v.color.name === selectedColor &&
+      v.size === selectedSize &&
+      v.stock > 0
   );
 
-  if (!variant) return;
+  // If no variant is selected yet, try to find the first available one to show the correct price and "Sale" badge if applicable. 
+  // This ensures that the card displays accurate information even before the user interacts with the picker.
+  const variant = selectedVariant || product.variants?.find(v => v.stock > 0) || product.variants?.[0];
+
+  const availableSizes = product.variants.filter(
+    v => v.color.name === selectedColor
+  );
+
+  
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        picker &&
+        cardRef.current &&
+        !cardRef.current.contains(event.target as Node)
+      ) {
+        setPicker(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [picker]);
 
   // Helper function to determine the correct image source URL, handling both absolute URLs and relative paths from the server
   const getImageSrc = (img: string) => {
@@ -33,11 +67,11 @@ export function ProductCard({ product }: { product: Product }) {
   };
 
   return (
-    <div className="group relative flex flex-col">
+    <div ref={cardRef} className="group relative flex flex-col">
       <Link to="/shop/$id" params={{ id: product.id }} className="hover-zoom relative block aspect-square overflow-hidden rounded-xl bg-secondary">
         <img src={getImageSrc(product.images[0])} alt={product.name} loading="lazy" className="h-full w-full object-cover" />
         {product.isNew && <span className="absolute left-3 top-3 rounded-full bg-gold px-2 py-1 text-[10px] font-bold uppercase text-gold-foreground">New</span>}
-        {variant.compareAtPrice && <span className="absolute right-3 top-3 rounded-full bg-destructive px-2 py-1 text-[10px] font-bold text-destructive-foreground">Sale</span>}
+        {variant?.compareAtPrice && <span className="absolute right-3 top-3 rounded-full bg-destructive px-2 py-1 text-[10px] font-bold text-destructive-foreground">Sale</span>}
       </Link>
       <button
         onClick={() => setPicker((p) => !p)}
@@ -55,7 +89,7 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
         <div className="mt-1 flex items-center gap-2">
           <span className="text-sm font-bold">{peso(product.minPrice)}</span>
-          {variant.compareAtPrice && <span className="text-xs text-muted-foreground line-through">{peso(variant.compareAtPrice)}</span>}
+          {variant?.compareAtPrice && <span className="text-xs text-muted-foreground line-through">{peso(variant.compareAtPrice)}</span>}
         </div>
         <div className="mt-2 flex gap-1.5">
           {colors.slice(0, 4).map((c) => (
@@ -66,19 +100,34 @@ export function ProductCard({ product }: { product: Product }) {
 
       {picker && (
         <div className="absolute inset-x-0 bottom-0 z-10 rounded-xl border border-border bg-popover p-3 shadow-xl">
+          <div className="mb-2 text-xs font-semibold">Select color</div>
+          <div className="flex gap-2 mb-3">
+            {colors.map((c) => (
+              <button type="button" aria-label={c.name}
+                key={c.name}
+                onClick={() => setSelectedColor(c.name)}
+                className={`h-6 w-6 rounded-full border ${
+                  selectedColor === c.name ? "ring-2 ring-gold" : ""
+                }`}
+                style={{ background: c.hex }}
+              />
+            ))}
+          </div>
           <div className="mb-2 text-xs font-semibold">Select size (UK)</div>
           <div className="grid grid-cols-6 gap-1">
-            {avail.slice(0, 12).map((s) => (
-              <button
-                key={s.size}
-                onClick={() => {
-                  add({ productId: product.id, variantId: variant.id, name: product.name, brand: product.brand, image: product.images[0],  quantity: 1, priceAtAdd: variant.price, size: variant.size, color: variant.color.name });
-                  toast.success(`Added UK ${s.size} to cart`);
+            {availableSizes.map(v => (
+              <button type="button"
+                key={`${v.size}-${v.color.name}`}
+                disabled={v.stock === 0}
+                onClick={() => { 
+                  setSelectedSize(v.size);
+                  add({ productId: product.id, variantId: v.id, name: product.name, brand: product.brand, image: product.images[0],  quantity: 1, priceAtAdd: v.price, size: v.size, color: v.color.name });
+                  toast.success(`Added ${product.name} ${v.color.name} UK ${v.size} to cart`);
                   setPicker(false);
                 }}
                 className="rounded-md border border-border py-1.5 text-xs hover:border-gold hover:bg-gold/10"
               >
-                {s.size}
+                {v.size}
               </button>
             ))}
           </div>
@@ -123,7 +172,11 @@ export function WishlistableCard({ product }: { product: Product }) {
             e.preventDefault();
             e.stopPropagation();
             toggle(product.id);
-            toast.success(`{wished ? "Removed" : "Added"} ${product.name} from wishlist`);
+            if (wished) {
+              toast.success(`Removed ${product.name} from wishlist`);
+            } else {
+              toast.success(`Added ${product.name} to wishlist`);
+            }
           }}
           aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
           className={`absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-all hover:scale-110 ${

@@ -17,6 +17,9 @@ const OrderItemSchema = new mongoose.Schema({
     ref: "Product",
     required: true,
   },
+  variantId: {
+    type: String,
+  },
   name: {
     type: String,
   },
@@ -55,7 +58,10 @@ const OrderSchema = new mongoose.Schema({
   shippingAddress: {
     name:{ 
       type: String
-    }, 
+    },
+    email: { 
+      type: String
+    },
     line1:{ 
       type: String
     }, 
@@ -95,6 +101,9 @@ const OrderSchema = new mongoose.Schema({
   },
   trackingNumber: {
     type: String,
+    unique: true,
+    sparse: true,
+    index: true,
   },
   carrier: {
     type: String,

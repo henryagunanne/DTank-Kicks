@@ -90,6 +90,7 @@ export function Header() {
           <Link to="/shop" search={{ category: "Sneakers" }} className="hover:text-gold">Sneakers</Link>
           <Link to="/shop" search={{ category: "Boots" }} className="hover:text-gold">Boots</Link>
           <Link to="/shop" search={{ category: "Sports" }} className="hover:text-gold">Sports</Link>
+          <Link to="/track" className="hover:text-gold">Track</Link>
         </nav>
 
         {/* Search — API-powered */}

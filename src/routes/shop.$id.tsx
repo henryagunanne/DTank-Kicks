@@ -92,10 +92,23 @@ function ProductPage() {
   });
 
   const wished = user ? has(product.id) : false;
+  const selectedVariantStock = selectedVariant?.stock ?? 0;
+  const canIncreaseQty = Boolean(selectedVariant) && qty < selectedVariantStock;
+  const showLowStock = selectedVariantStock > 0 && selectedVariantStock < 10;
 
   const onAdd = () => {
-    if (!selectedSize) { toast.error("Please select a size"); return; }
-    if (!selectedVariant) { toast.error("Selected variant is unavailable"); return; }
+    if (!selectedSize) {
+      toast.error("Please select a size");
+      return;
+    }
+    if (!selectedVariant) {
+      toast.error("Selected variant is unavailable");
+      return;
+    }
+    if (qty > selectedVariantStock) {
+      toast.error(`Only ${selectedVariantStock} item${selectedVariantStock === 1 ? "" : "s"} in stock for this size.`);
+      return;
+    }
     add({ productId: product.id, variantId: selectedVariant.id, name: product.name, brand: product.brand, image: product.images[0], quantity: qty, priceAtAdd: selectedVariant.price, size: selectedVariant.size, color: selectedVariant.color.name });
     toast.success(`${product.name} (UK ${selectedSize}) added to cart`);
   };
@@ -186,21 +199,58 @@ function ProductPage() {
             </div>
           </div>
 
-          <div className="mt-7 flex items-center gap-3">
-            <div className="flex items-center rounded-full border border-border">
-              <button onClick={() => setQty(Math.max(1, qty - 1))} aria-label="Decrease quantity" className="p-3"><Minus className="h-4 w-4" /></button>
-              <span className="w-10 text-center text-sm font-bold">{qty}</span>
-              <button onClick={() => setQty(qty + 1)} aria-label="Increase quantity" className="p-3"><Plus className="h-4 w-4" /></button>
-            </div>
-            <button onClick={onAdd} className="flex-1 rounded-full bg-primary py-3.5 text-sm font-bold uppercase tracking-wider text-primary-foreground hover:bg-primary/90">
-              Add to Cart
-            </button>
-            {user && (
-              <button aria-label={wished ? "Remove from wishlist" : "Add to wishlist"} onClick={() => { toggle(product.id); toast.success(wished ? "Removed from wishlist" : "Added to wishlist"); }}
-                className={`rounded-full border border-border p-3.5 ${wished ? "bg-destructive/10 text-destructive border-destructive/40" : ""}`}>
-                <Heart className={`h-5 w-5 ${wished ? "fill-current" : ""}`} />
+          <div className="mt-7 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center rounded-full border border-border">
+                <button
+                  onClick={() => setQty(Math.max(1, qty - 1))}
+                  aria-label="Decrease quantity"
+                  className="p-3"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <span className="w-10 text-center text-sm font-bold">{qty}</span>
+                <button
+                  onClick={() => {
+                    if (!selectedSize) return;
+                    setQty((current) => Math.min(selectedVariantStock, current + 1));
+                  }}
+                  aria-label="Increase quantity"
+                  className="p-3"
+                  disabled={!selectedSize || !canIncreaseQty}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+              <button
+                onClick={onAdd}
+                disabled={!selectedSize || !selectedVariant || qty === 0 || qty > selectedVariantStock}
+                className="flex-1 rounded-full bg-primary py-3.5 text-sm font-bold uppercase tracking-wider text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Add to Cart
               </button>
-            )}
+              {user && (
+                <button
+                  aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
+                  onClick={() => {
+                    toggle(product.id);
+                    toast.success(wished ? "Removed from wishlist" : "Added to wishlist");
+                  }}
+                  className={`h-12 w-12 shrink-0 rounded-full border border-border flex items-center justify-center transition ${wished ? "bg-destructive/10 text-destructive border-destructive/40" : "bg-background text-muted-foreground hover:border-gold"}`}
+                >
+                  <Heart className={`h-5 w-5 ${wished ? "fill-current" : ""}`} />
+                </button>
+              )}
+            </div>
+            {selectedSize && selectedVariant && showLowStock ? (
+              <p className="text-sm text-red-500">Only {selectedVariantStock} left in stock for this size.</p>
+            ) : null}
+            {selectedSize && !selectedVariant ? (
+              <p className="text-sm text-red-500">This size is out of stock.</p>
+            ) : null}
+            {!selectedSize ? (
+              <p className="text-sm text-red-500">Select a size before increasing quantity.</p>
+            ) : null}
           </div>
 
           <div className="mt-8 grid grid-cols-3 gap-4 rounded-xl border border-border p-4 text-xs">

@@ -76,13 +76,33 @@ router.post("/", authenticate, async (req, res, next) => {
   }
 });
 
-// DELETE /api/cart/:id  — remove a line
 router.delete("/:id", authenticate, async (req, res, next) => {
   try {
-    const cart = await getOrCreate(req.user._id);
-    cart.items = cart.items.filter((i) => i.id !== req.params.id);
-    await cart.save();
-    res.json(cart.toClient());
+    const userId = req.user._id;
+
+    const result = await Cart.findOneAndUpdate(
+      { user: userId },
+      {
+        $pull: {
+          items: { id: req.params.id }
+        }
+      },
+      {
+        new: true,       // return updated cart
+        runValidators: true
+      }
+    );
+
+    // fallback safety: if cart doesn't exist
+    if (!result) {
+      const cart = await Cart.create({
+        user: userId,
+        items: []
+      });
+      return res.json(cart.toClient());
+    }
+
+    res.json(result.toClient());
   } catch (e) {
     next(e);
   }
@@ -129,10 +149,20 @@ router.put("/merge", authenticate, async (req, res, next) => {
 // DELETE /api/cart  — clear cart
 router.delete("/", authenticate, async (req, res, next) => {
   try {
-    const cart = await getOrCreate(req.user._id);
-    cart.items = [];
-    await cart.save();
-    res.json(cart.toClient());
+    const cart = await Cart.updateOne(
+      { user: req.user._id },
+      { $set: { items: [] } }
+    );
+
+    if (cart.nModified === 0) {
+      // If no cart was modified, it means the user doesn't have a cart yet. Create an empty one.
+      const newCart = await Cart.create({ user: req.user._id, items: [] });
+      return res.json(newCart.toClient());
+    }
+
+    // Return the updated cart (now empty)
+    const updatedCart = await Cart.findOne({ user: req.user._id });
+    res.json(updatedCart.toClient());
   } catch (e) {
     next(e);
   }
