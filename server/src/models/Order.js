@@ -55,6 +55,10 @@ const OrderSchema = new mongoose.Schema({
   items: {
     type: [OrderItemSchema],
   },
+  cartItemIds: {
+    type: [String],
+    default: [],
+  },
   shippingAddress: {
     name:{ 
       type: String
@@ -81,23 +85,56 @@ const OrderSchema = new mongoose.Schema({
       type: String 
     }
   },
+  billingAddress: {
+    name: { type: String },
+    email: { type: String },
+    line1: { type: String },
+    city: { type: String },
+    province: { type: String },
+    postalCode: { type: String },
+    country: { type: String },
+    phone: { type: String }
+  },
   deliveryMethod: {
     type: String,
-    enum: ["standard", "express"],
+    enum: ["standard", "express", "international"],
     default: "standard",
   },
+  status: {
+    type: String,
+    enum: ["pending", "processing payment", "paid", "packing", "shipped", "delivered", "cancelled", "refunded", "payment failed"],
+    default: "pending",
+  },
+
   paymentStatus: {
     type: String,
     enum: ["pending", "paid", "failed", "refunded"],
     default: "pending",
   },
+  
   fulfillmentStatus: {
     type: String,
     enum: ["placed", "processing", "shipped", "delivered", "cancelled"],
     default: "placed",
   },
-  stripePaymentIntentId: {
+
+  paymentIntentId: {
     type: String,
+  },
+  paymentMethod: {
+    type: String,
+  },
+  currency: {
+    type: String,
+  },
+  stripeCustomerId: {
+    type: String,
+  },
+  receiptUrl: {
+    type: String,
+  },
+  paidAt: {
+    type: Date,
   },
   trackingNumber: {
     type: String,

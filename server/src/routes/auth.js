@@ -88,6 +88,35 @@ router.post("/login",
 
 router.get("/me", authenticate, (req, res) => res.json({ user: req.user }));
 
+// PUT /api/auth/change-password` - allows an authenticated user to change their password by providing the current password and a new password. Validates that the new password is different from the current one.
+router.put("/change-password",
+  authenticate,
+  body("currentPassword").isLength({ min: 1 }),
+  body("newPassword").isLength({ min: 8, max: 128 }),
+  body("confirmPassword").custom((value, { req }) => value === req.body.newPassword),
+  validate,
+  async (req, res) => {
+      try {
+        const { currentPassword, newPassword, confirmPassword } = req.body;
+        const user = await User.findById(req.user._id);
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+          return res.status(400).json({ error: "Current password is incorrect" });
+        }
+
+        if (currentPassword === newPassword) {
+          return res.status(400).json({ error: "New password must be different from current password" });
+        }
+
+        user.passwordHash = await bcrypt.hash(newPassword, 12);
+        await user.save();
+        res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to change password" });
+    }
+  }
+);
 
 // POST /api/auth/forgot-password` - initiates password reset by generating a token and sending a reset link to the user's email.
 router.post("/forgot-password",
@@ -111,11 +140,13 @@ router.post("/forgot-password",
 );
 
 
-// POST /api/auth/reset-password` - completes password reset using a valid token and new password.
+// POST /api/auth/reset-password` - completes the password reset process by validating the token and updating the user's password.
+// Maybe used when the user clicks the reset link in their email. Validates the token and allows the user to set a new password.
 router.post("/reset-password",
   authLimiter,
   body("token").isString().isLength({ min: 10, max: 128 }),
   body("password").isLength({ min: 8, max: 128 }),
+  body("confirmPassword").custom((value, { req }) => value === req.body.password),
   validate,
   async (req, res) => {
 

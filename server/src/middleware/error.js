@@ -14,7 +14,7 @@ function validate(req, res, next) {
 
 function errorHandler(err, _req, res, _next) {
   console.error(err);
-  res.status(err.status || 500).json({ error: err.message || "Server error" });
+  res.status(err.statusCode || err.status || 500).json({ error: err.message || "Server error" });
 }
 
 module.exports = { validate, errorHandler };

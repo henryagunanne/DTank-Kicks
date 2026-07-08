@@ -3,11 +3,9 @@ import { useState } from "react";
 import { CreditCard, ShieldCheck, Truck, RotateCcw, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { useCart } from "@/lib/cart-context";
-import { peso } from "@/lib/format";
+import { USD } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
-import { createOrder } from "@/lib/order-api";
-
-import type { CreateOrderPayload } from "@/lib/order-api";
+import { PaymentForm } from "@/components/checkout/PaymentForm";
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || "http://localhost:4000"; // Fallback API base URL for client-side rendering  
 
@@ -18,8 +16,12 @@ export const Route = createFileRoute("/checkout")({
 
 function CheckoutPage() {
   const { user, accessToken } = useAuth();
-  const { selectedCartItems, selectedItems, discount, removeSelectedItems } = useCart();
+  const { selectedCartItems, discount, removeSelectedItems, setSelectedItems } = useCart();
   const nav = useNavigate();
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [paymentReady, setPaymentReady] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const primaryAddress = user?.addresses?.[0];
 
@@ -57,69 +59,103 @@ function CheckoutPage() {
     );
   }
 
-  const placeOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Prepare the payment by sending the shipping address, delivery method, discount, and selected item IDs to the server to create a payment intent and order
+  const preparePayment = async () => {
+    if (!selectedCartItems.length) return;
 
     try {
       setSubmitting(true);
+      setPaymentError(null);
+      setPaymentReady(false);
 
-      const orderItems = selectedCartItems.map((item) => ({
-        product: item.productId,
-        variantId: item.variantId,
-        name: item.name,
-        image: item.image,
-        brand: item.brand,
-        size: item.size,
-        color: item.color,
-        quantity: item.quantity,
-        price: item.priceAtAdd,
-      }));
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (accessToken) {
+        headers.Authorization = `Bearer ${accessToken}`;
+      }
 
-      const payload: CreateOrderPayload = {
-        items: orderItems,
-
-        guestEmail: !user ? email : undefined,
-
-        shippingAddress: {
-          name: name,
-          email: email,
-          line1: address,
-          city: city,
-          province: province,
-          postalCode: postalCode,
-          country: country,
-          phone: phone,
-        },
-
-        deliveryMethod: delivery === "exp" ? "express" : "standard",
-        subtotal: subtotal,
-        shipping: shipFee,
-        tax: tax,
-        discount: discount,
-        total: total,
-      };
-
-      
-
-      const order = await createOrder(payload, accessToken ? accessToken : undefined);
-
-      removeSelectedItems(selectedItems); // Clear the ordered items from the cart
-
-      toast.success("Order placed!");
-
-      nav({
-        to: "/order/success",
-        search: {
-          id: order._id,
-        },
+      const res = await fetch(`${API_BASE}/api/payments/create-payment-intent`, {
+        method: "POST",
+        credentials: "include",
+        headers,
+        body: JSON.stringify({
+          shippingAddress: {
+            name,
+            email,
+            phone,
+            line1: address,
+            city,
+            province,
+            postalCode,
+            country,
+          },
+          deliveryMethod: delivery === "exp" ? "express" : "standard",
+          discount,
+          selectedItemIds: selectedCartItems.map((item) => item.id),
+          selectedItems: selectedCartItems.map((item) => ({
+            id: item.id,
+            productId: item.productId,
+            variantId: item.variantId,
+            name: item.name,
+            brand: item.brand,
+            image: item.image,
+            quantity: item.quantity,
+            size: item.size,
+            color: item.color,
+            priceAtAdd: item.priceAtAdd,
+          })),
+        }),
       });
-    } catch (err) {
-      console.error(err);
-      // Undo 
 
-      toast.error("Failed to place order");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) {
+          toast.warning("Your session has expired. You can still continue as a guest.");
+        }
+        throw new Error(data.error || "Unable to prepare payment");
+      }
+
+      setClientSecret(data.clientSecret);
+      setOrderId(data.orderId);
+      setPaymentReady(true);
+      toast.success("Secure checkout is ready.");
+    } catch (error) {
+      console.error(error);
+      setPaymentError(error instanceof Error ? error.message : "Unable to prepare payment");
+      toast.error(error instanceof Error ? error.message : "Unable to prepare payment");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Handle the form submission for placing the order and initiating the payment process
+  const placeOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (payment === "paypal") {
+      toast.error("PayPal is not enabled for this checkout flow yet.");
+      return;
+    }
+
+    if (!paymentReady || !clientSecret || !orderId) {
+      await preparePayment();
+      return;
+    }
+
+    toast.success("Complete the secure card payment below.");
+  };
+
+  // Handle successful payment by removing purchased items from the cart and navigating to the order success page
+  const handlePaymentSuccess = async (paymentIntentId: string) => {
+    try {
+      const idsToRemove = selectedCartItems.map((item) => item.id);
+      if (idsToRemove.length > 0) {
+        removeSelectedItems(idsToRemove);
+        setSelectedItems([]);
+      }
+      nav({ to: "/order/success", search: { id: orderId || paymentIntentId } });
+    } catch (error) {
+      console.error(error);
+      toast.error("Payment completed but the success page could not be opened.");
     }
   };
 
@@ -138,7 +174,7 @@ function CheckoutPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
       <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Checkout</h1>
-      <form onSubmit={placeOrder} className="mt-10 grid gap-10 lg:grid-cols-[1fr_400px]">
+      <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_400px]">
         <div className="space-y-8">
           {/* Contact & Shipping - if the user is logged in automatically fills in the fields with their information */}
           <section className="rounded-xl border border-border p-6">
@@ -159,8 +195,8 @@ function CheckoutPage() {
           <section className="rounded-xl border border-border p-6">
             <h2 className="text-lg font-bold">2. Delivery Method</h2>
             <div className="mt-5 space-y-3">
-              <DeliveryOpt name="std" selected={delivery === "std"} onClick={() => setDelivery("std")} title="Standard" sub="3–5 days" price={subtotal >= 2000 ? "FREE" : peso(150)} />
-              <DeliveryOpt name="exp" selected={delivery === "exp"} onClick={() => setDelivery("exp")} title="Express" sub="1–2 days" price={peso(350)} />
+              <DeliveryOpt name="std" selected={delivery === "std"} onClick={() => setDelivery("std")} title="Standard" sub="3–5 days" price={subtotal >= 2000 ? "FREE" : USD(150)} />
+              <DeliveryOpt name="exp" selected={delivery === "exp"} onClick={() => setDelivery("exp")} title="Express" sub="1–2 days" price={USD(350)} />
             </div>
           </section>
 
@@ -176,13 +212,16 @@ function CheckoutPage() {
               </button>
             </div>
             {payment === "card" && (
-              <div className="mt-5 grid gap-4">
-                <Input label="Card number" placeholder="4242 4242 4242 4242" required />
-                <div className="grid grid-cols-3 gap-4">
-                  <Input label="Exp." placeholder="MM/YY" required />
-                  <Input label="CVC" placeholder="123" required />
-                  <Input label="ZIP" required />
-                </div>
+              <div className="mt-5 space-y-4">
+                {submitting && !clientSecret && <div className="text-sm text-muted-foreground">Preparing your secure checkout…</div>}
+                {paymentError && <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{paymentError}</div>}
+                {clientSecret && (
+                  <PaymentForm
+                    clientSecret={clientSecret}
+                    onSuccess={handlePaymentSuccess}
+                    onError={(message) => setPaymentError(message)}
+                  />
+                )}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground"><Lock className="h-3 w-3" /> Stripe-secured payment</div>
               </div>
             )}
@@ -203,24 +242,24 @@ function CheckoutPage() {
                 <img src={getImageSrc(it.image)} alt={it.name} loading="lazy" className="h-14 w-14 rounded-md object-cover" />
                 <div className="flex-1 text-xs">
                   <div className="font-semibold">{it.name}</div>
-                  <div className="text-muted-foreground">UK {it.size} • {it.color} • Qty {it.quantity}</div>
+                  <div className="text-muted-foreground">US {it.size} • {it.color} • Qty {it.quantity}</div>
                 </div>
-                <div className="text-sm font-semibold">{peso(it.priceAtAdd * it.quantity)}</div>
+                <div className="text-sm font-semibold">{USD(it.priceAtAdd * it.quantity)}</div>
               </div>
             ))}
           </div>
           <dl className="mt-5 space-y-2 border-t border-border pt-4 text-sm">
-            <div className="flex justify-between"><dt>Subtotal</dt><dd>{peso(subtotal)}</dd></div>
-            <div className="flex justify-between"><dt>Shipping</dt><dd>{shipFee === 0 ? "FREE" : peso(shipFee)}</dd></div>
-            <div className="flex justify-between text-muted-foreground"><dt>Tax</dt><dd>{peso(tax)}</dd></div>
-            {discount > 0 && <div className="flex justify-between text-gold"><dt>Discount</dt><dd>-{peso(discount)}</dd></div>}
-            <div className="flex justify-between border-t border-border pt-3 text-base font-bold"><dt>Total</dt><dd>{peso(total)}</dd></div>
+            <div className="flex justify-between"><dt>Subtotal</dt><dd>{USD(subtotal)}</dd></div>
+            <div className="flex justify-between"><dt>Shipping</dt><dd>{shipFee === 0 ? "FREE" : USD(shipFee)}</dd></div>
+            <div className="flex justify-between text-muted-foreground"><dt>Tax</dt><dd>{USD(tax)}</dd></div>
+            {discount > 0 && <div className="flex justify-between text-gold"><dt>Discount</dt><dd>-{USD(discount)}</dd></div>}
+            <div className="flex justify-between border-t border-border pt-3 text-base font-bold"><dt>Total</dt><dd>{USD(total)}</dd></div>
           </dl>
-          <button type="submit" disabled={submitting} className="mt-6 w-full rounded-full bg-gold py-3.5 text-sm font-bold uppercase tracking-wider text-gold-foreground disabled:opacity-60">
-            {submitting ? "Processing..." : `Place Order • ${peso(total)}`}
+          <button type="button" onClick={() => placeOrder({ preventDefault: () => {} } as React.FormEvent)} disabled={submitting} className="mt-6 w-full rounded-full bg-gold py-3.5 text-sm font-bold uppercase tracking-wider text-gold-foreground disabled:opacity-60">
+            {submitting ? "Preparing payment..." : `Pay • ${USD(total)}`}
           </button>
         </aside>
-      </form>
+      </div>
     </div>
   );
 }

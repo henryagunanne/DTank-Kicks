@@ -106,7 +106,7 @@ function ShopPage() {
         </div>
       </div>
       <div>
-        <h3 className="mb-3 text-xs font-bold uppercase tracking-widest">Size (UK)</h3>
+        <h3 className="mb-3 text-xs font-bold uppercase tracking-widest">Size (US)</h3>
         <div className="grid grid-cols-4 gap-2">
           {[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((s) => (
             <button key={s} onClick={() => set({ size: search.size === s ? undefined : s })}

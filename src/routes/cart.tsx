@@ -11,7 +11,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useCart } from "@/lib/cart-context";
 import { fetchProductById } from "@/lib/product-api";
-import { peso } from "@/lib/format";
+import { USD } from "@/lib/format";
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || "http://localhost:4000"; // Fallback API base URL for client-side rendering
 
@@ -130,7 +130,7 @@ function CartPage() {
                   <div>
                     <div className="text-xs uppercase text-muted-foreground">{it.brand}</div>
                     <div className="font-semibold">{it.name}</div>
-                    <div className="text-xs text-muted-foreground">UK {it.size} • {it.color}</div>
+                    <div className="text-xs text-muted-foreground">US {it.size} • {it.color}</div>
                   </div>
                   <button onClick={() => remove(it.id)} aria-label="Remove"><X className="h-4 w-4 text-muted-foreground hover:text-destructive" /></button>
                 </div>
@@ -160,7 +160,7 @@ function CartPage() {
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <div className="font-bold">{peso(it.priceAtAdd * it.quantity)}</div>
+                  <div className="font-bold">{USD(it.priceAtAdd * it.quantity)}</div>
                 </div>
                 {variantStockMap[it.variantId] !== undefined && it.quantity > variantStockMap[it.variantId] ? (
                   <p className="mt-2 text-xs text-red-500">Quantity exceeds available stock of {variantStockMap[it.variantId]}.</p>
@@ -174,11 +174,11 @@ function CartPage() {
         <aside className="h-fit rounded-xl border border-border p-6">
           <h2 className="text-lg font-bold">Order Summary</h2>
           <dl className="mt-6 space-y-3 text-sm">
-            <div className="flex justify-between"><dt>Subtotal</dt><dd>{peso(selectedSubtotal)}</dd></div>
-            {discount > 0 && <div className="flex justify-between text-gold"><dt>Discount</dt><dd>-{peso(discount)}</dd></div>}
-            <div className="flex justify-between"><dt>Shipping</dt><dd>{shipping === 0 ? "FREE" : peso(shipping)}</dd></div>
-            <div className="flex justify-between text-muted-foreground"><dt>Estimated tax</dt><dd>{peso(tax)}</dd></div>
-            <div className="flex justify-between border-t border-border pt-3 text-base font-bold"><dt>Total</dt><dd>{peso(total)}</dd></div>
+            <div className="flex justify-between"><dt>Subtotal</dt><dd>{USD(selectedSubtotal)}</dd></div>
+            {discount > 0 && <div className="flex justify-between text-gold"><dt>Discount</dt><dd>-{USD(discount)}</dd></div>}
+            <div className="flex justify-between"><dt>Shipping</dt><dd>{shipping === 0 ? "FREE" : USD(shipping)}</dd></div>
+            <div className="flex justify-between text-muted-foreground"><dt>Estimated tax</dt><dd>{USD(tax)}</dd></div>
+            <div className="flex justify-between border-t border-border pt-3 text-base font-bold"><dt>Total</dt><dd>{USD(total)}</dd></div>
           </dl>
           <div className="mt-5 flex gap-2">
             <input value={coupon} onChange={(e) => setCoupon(e.target.value)} placeholder="Coupon code" className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm" />

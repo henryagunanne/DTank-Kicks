@@ -6,7 +6,7 @@ import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from "rec
 import { useAuth } from "@/lib/auth-context";
 import { createProduct, updateProduct, deleteProduct, fetchAllOrders, fetchAdminDashboard, updateOrderStatus, fetchAllCustomers } from "@/lib/admin-api";
 import { fetchProducts } from "@/lib/product-api";
-import { peso } from "@/lib/format";
+import { USD } from "@/lib/format";
 import { toast } from "sonner";
 import type { Product } from "@/lib/types";
 
@@ -61,7 +61,7 @@ function Dashboard() {
   });
 
   const cards = [
-    { l: "Revenue (30d)", v: peso(stats?.revenue30d ?? 0), },
+    { l: "Revenue (30d)", v: USD(stats?.revenue30d ?? 0), },
     { l: "Total Orders", v: stats?.totalOrders ?? 0, },
     { l: "Customers", v: stats?.customers ?? 0, },
     { l: "Low Stock Alerts", v: stats?.lowStock ?? 0, warn: true, },
@@ -332,7 +332,7 @@ function ProductsTab() {
                 <td>{p.brand}</td>
                 <td className="font-medium">{p.name}</td>
                 <td>{p.category}</td>
-                <td>{peso(p.minPrice)} - {peso(p.maxPrice)}</td>
+                <td>{USD(p.minPrice)} - {USD(p.maxPrice)}</td>
                 <td>{p.sizes.reduce((s, x) => s + x.stock, 0)}</td>
                 <td className="space-x-2 text-xs">
                   <button onClick={() => { openEdit(p);}} className="text-blue-600 hover:underline">Edit</button>
@@ -477,7 +477,7 @@ function OrdersTab() {
             <tr key={order._id} className="border-t border-border">
               <td className="p-3 font-mono">{order._id}</td>
               <td>{order.user?.name || "Guest"}</td>
-              <td>{peso(order.total)}</td>
+              <td>{USD(order.total)}</td>
               <td>
                 <select 
                   aria-label="Order Status" 
@@ -531,7 +531,7 @@ function CustomersTab() {
               <td className="p-3 font-medium">{customer.name}</td>
               <td className="text-muted-foreground">{customer.email}</td>
               <td>{customer.orders}</td>
-              <td className="font-semibold">{peso(customer.spend)}</td>
+              <td className="font-semibold">{USD(customer.spend)}</td>
             </tr>
           ))}
         </tbody>

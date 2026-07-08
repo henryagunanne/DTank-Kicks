@@ -11,7 +11,7 @@ import { Heart, Minus, Plus, Star, Truck, RotateCcw, ShieldCheck, ChevronRight }
 import { toast } from "sonner";
 import { fetchProductById, fetchProducts, fetchProductsByIds, fetchReviews, createReview } from "@/lib/product-api";
 import type { Product, Review } from "@/lib/types";
-import { peso } from "@/lib/format";
+import { USD } from "@/lib/format";
 import { useCart } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { useWishlist } from "@/lib/wishlist-context";
@@ -110,7 +110,7 @@ function ProductPage() {
       return;
     }
     add({ productId: product.id, variantId: selectedVariant.id, name: product.name, brand: product.brand, image: product.images[0], quantity: qty, priceAtAdd: selectedVariant.price, size: selectedVariant.size, color: selectedVariant.color.name });
-    toast.success(`${product.name} (UK ${selectedSize}) added to cart`);
+    toast.success(`${product.name} (US ${selectedSize}) added to cart`);
   };
 
   // Helper function to determine the correct image source URL, handling both absolute URLs and relative paths from the server
@@ -163,9 +163,9 @@ function ProductPage() {
           </div>
           <div className="mt-4 flex items-baseline gap-3">
             <span className="text-3xl font-black">
-              {selectedVariant ? peso(selectedVariant.price) : peso(Math.min(...product.variants.map(v => v.price)))}   
+              {selectedVariant ? USD(selectedVariant.price) : USD(Math.min(...product.variants.map(v => v.price)))}   
               </span>
-            {selectedVariant?.compareAtPrice && <span className="text-lg text-muted-foreground line-through">{peso(selectedVariant.compareAtPrice)}</span>}
+            {selectedVariant?.compareAtPrice && <span className="text-lg text-muted-foreground line-through">{USD(selectedVariant.compareAtPrice)}</span>}
           </div>
 
           <div className="mt-7">
@@ -184,7 +184,7 @@ function ProductPage() {
 
           <div className="mt-6">
             <div className="mb-2 flex items-center justify-between">
-              <div className="text-xs font-bold uppercase tracking-widest">Size (UK)</div>
+              <div className="text-xs font-bold uppercase tracking-widest">Size (US)</div>
               <SizeGuideButton />
             </div>
             <div className="grid grid-cols-6 gap-2">

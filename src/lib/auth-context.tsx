@@ -27,6 +27,7 @@ interface AuthCtx {
   accessToken: string | null;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -203,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-
+  // Register creates a new user account and logs them in automatically. Returns the same shape as login.
   const register: AuthCtx["register"] = async (name, email, password) => {
     try {
       const res = await fetch("/api/auth/register", {
@@ -237,7 +238,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
 
+  // Change password allows an authenticated user to change their password by providing the current password and a new password. Validates that the new password is different from the current one.
+  const changePassword: AuthCtx["changePassword"] = async (currentPassword, newPassword, confirmPassword) => {
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        credentials: "include",
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+      });
 
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { ok: false, error: data.error || data.message || "Failed to change password" };
+      }
+
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Could not reach the server. Is it running?" };
+    }
+  };
+
+
+  // Logout clears the local state and also calls the server to clear the httpOnly refresh cookie
   const logout: AuthCtx["logout"] = async () => {
     if (typeof window === "undefined" || !window.localStorage) {
       clear();
@@ -266,7 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, accessToken, login, register, logout }}>
+    <Ctx.Provider value={{ user, loading, accessToken, login, register, changePassword, logout }}>
       {children}
     </Ctx.Provider>
   );

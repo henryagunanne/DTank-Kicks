@@ -17,7 +17,7 @@ import { fetchWishlist } from "@/lib/product-api";
 
 import { WishlistableCard } from "@/components/site/ProductCard";
 
-import { peso } from "@/lib/format";
+import { USD } from "@/lib/format";
 import { toast } from "sonner";
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || "http://localhost:4000"; // Fallback API base URL for client-side rendering
@@ -37,7 +37,7 @@ export const Route = createFileRoute("/account")({
 });
 
 function AccountPage() {
-  const { user, logout, accessToken } = useAuth();
+  const { user, logout, changePassword, accessToken } = useAuth();
   const { add } = useCart();
   const nav = Route.useNavigate();
   const search = Route.useSearch();
@@ -88,7 +88,30 @@ function AccountPage() {
     enabled: !!user,
   });
 
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
   const qc = useQueryClient();
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async () => {
+      if (newPassword !== confirmPassword) {
+        throw new Error("New passwords do not match");
+      }
+
+      return changePassword(currentPassword, newPassword, confirmPassword);
+    },
+    onSuccess: () => {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Password updated successfully");
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Unable to update password");
+    },
+  });
 
   const cancelMutation = useMutation({
     mutationFn: (orderId: string) => {
@@ -254,7 +277,7 @@ function AccountPage() {
                         
                         {/* RIGHT COLUMN */}
                         <div className="flex min-w-[140px] flex-col items-end gap-2 text-right">
-                          <div className="font-bold">{peso(o.total)}</div>
+                          <div className="font-bold">{USD(o.total)}</div>
                           <div className="flex flex-col items-end gap-2">
                             {o.fulfillmentStatus !== "cancelled" && (
                               <Link to="/order/$id" params={{ id: o._id || o.id }}>
@@ -360,14 +383,44 @@ function AccountPage() {
 
         {/* Security */}
         {tab === "security" && (
-          <form className="grid max-w-md gap-4">
-            {["Current password", "New password", "Confirm new password"].map((l) => (
-              <label key={l} className="block">
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{l}</div>
-                <input type="password" className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm" />
-              </label>
-            ))}
-            <button type="button" className="w-fit rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground">Update password</button>
+          <form className="grid max-w-md gap-4" onSubmit={(event) => {
+            event.preventDefault();
+            changePasswordMutation.mutate();
+          }}>
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Current password</div>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+              />
+            </label>
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">New password</div>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+              />
+            </label>
+            <label className="block">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Confirm new password</div>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={changePasswordMutation.status === "pending"}
+              className="w-fit rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50"
+            >
+              {changePasswordMutation.status === "pending" ? "Updating…" : "Update password"}
+            </button>
           </form>
         )}
       </div>

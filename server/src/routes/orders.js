@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const router = require("express").Router();
 const { body } = require("express-validator");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const { authenticate, requireAdmin } = require("../middleware/auth");
@@ -49,39 +50,17 @@ router.post("/",
 
       const { items, guestEmail, shippingAddress, deliveryMethod, subtotal, shipping, tax, discount, total } = req.body;
 
-      // Decrease stock for each ordered item
-      for (const item of items) {
-        const result = await Product.updateOne(
-          {
-            _id: item.product,
-            "variants": {
-              $elemMatch: {
-                _id: item.variantId,
-                stock: { $gte: item.quantity }
-              }
-            }
-          },
-          {
-            $inc: {
-              "variants.$.stock": -item.quantity
-            }
-          }
-        );
-
-        if (result.modifiedCount === 0) {
-          throw new Error(`Insufficient stock for product ${item.product}`);
-        }
-      }
-
       const trackingNumber = await generateUniqueTrackingToken();
 
-      // Create the order
       const order = await Order.create({
         user: user || null,
         guestEmail: guestEmail,
         items: items,
         shippingAddress: shippingAddress,
         deliveryMethod: deliveryMethod,
+        status: "pending",
+        paymentStatus: "pending",
+        fulfillmentStatus: "placed",
         subtotal: subtotal,
         shipping: shipping,
         tax: tax,
@@ -185,32 +164,83 @@ router.get("/track/:token", async (req, res) => {
 });
 
 
-// PUT /api/orders/:id/status - updates the fulfillment status of an order. Admins can update any order, while regular users can only update their own orders (e.g., to cancel).
-router.put("/:id/status", authenticate, requireAdmin,
-  body("status").isIn(["placed", "processing", "shipped", "delivered", "cancelled"]),
-  validate,
-  async (req, res) => {
-    try {
-      const order = await Order.findByIdAndUpdate(req.params.id, { fulfillmentStatus: req.body.status }, { new: true });
+async function updateOrderStatus(req, res) {
+  try {
+    const currentOrder = await Order.findById(req.params.id);
+    if (!currentOrder) return res.status(404).json({ error: "Order not found" });
 
-      // send email notification to user about status update
-      const recipientEmail = order.shippingAddress?.email || order.guestEmail;
-      if (recipientEmail) {
-        await sendEmail({
-          to: order.shippingAddress.email,
-          subject: `Order Update - ${order._id}`,
-          text: `<h2>Your order status has been updated</h2><p>Your order ID is ${order._id} and its new status is ${order.fulfillmentStatus}.</p>`,
-        });
-      }
+    const nextStatus = req.body.status;
+    const paymentStatus = ["paid", "refunded", "payment failed"].includes(nextStatus)
+      ? nextStatus
+      : currentOrder.paymentStatus;
+    const fulfillmentStatus = nextStatus === "shipped"
+      ? "shipped"
+      : nextStatus === "delivered"
+        ? "delivered"
+        : nextStatus === "cancelled"
+          ? "cancelled"
+          : "placed";
 
-      res.json(order);
-    } catch (err) {
-      console.error("Error updating order status", err);
-      res.status(500).json({ error: "Failed to update order status" });
+    const order = await Order.findByIdAndUpdate(req.params.id, {
+      status: nextStatus,
+      paymentStatus,
+      fulfillmentStatus,
+    }, { new: true });
+
+    const recipientEmail = order.shippingAddress?.email || order.guestEmail;
+    if (recipientEmail) {
+      await sendEmail(
+        recipientEmail,
+        `Order Update - ${order._id}`,
+        `<h2>Your order status has been updated</h2><p>Your order ID is ${order._id} and its new status is ${order.status}.</p>`
+      );
     }
+
+    res.json(order);
+  } catch (err) {
+    console.error("Error updating order status", err);
+    res.status(500).json({ error: "Failed to update order status" });
   }
+}
+
+// PATCH /api/orders/:id/status - updates the fulfillment status of an order. Admins can update any order.
+router.patch("/:id/status", authenticate, requireAdmin,
+  body("status").isIn(["pending", "processing payment", "paid", "packing", "shipped", "delivered", "cancelled", "refunded", "payment failed"]),
+  validate,
+  updateOrderStatus
 );
 
+router.put("/:id/status", authenticate, requireAdmin,
+  body("status").isIn(["pending", "processing payment", "paid", "packing", "shipped", "delivered", "cancelled", "refunded", "payment failed"]),
+  validate,
+  updateOrderStatus
+);
+
+router.post("/:id/refund", authenticate, requireAdmin, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (!order.paymentIntentId && !order.stripePaymentIntentId) {
+      return res.status(400).json({ error: "No Stripe payment attached to this order" });
+    }
+
+    const refund = await stripe.refunds.create({
+      payment_intent: order.paymentIntentId || order.stripePaymentIntentId,
+      metadata: { orderId: order._id.toString() },
+    });
+
+    order.paymentStatus = "refunded";
+    order.status = "refunded";
+    order.fulfillmentStatus = "cancelled";
+    order.receiptUrl = order.receiptUrl || refund.id;
+    await order.save();
+
+    res.json({ refund, order });
+  } catch (err) {
+    console.error("Refund failed", err);
+    res.status(500).json({ error: "Failed to refund order" });
+  }
+});
 
 // POST /api/orders/:id/cancel - allows a user to cancel their order if it hasn't been shipped yet. 
 // This should update the order's fulfillment status to "cancelled" and restore the stock for the cancelled items.

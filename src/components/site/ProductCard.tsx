@@ -3,7 +3,7 @@ import { Star, Plus, Heart } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Product } from "@/lib/types";
-import { peso } from "@/lib/format";
+import { USD } from "@/lib/format";
 import { useCart } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { useWishlist } from "@/lib/wishlist-context";
@@ -88,8 +88,8 @@ export function ProductCard({ product }: { product: Product }) {
           {product.rating.toFixed(1)} <span>({product.reviewCount})</span>
         </div>
         <div className="mt-1 flex items-center gap-2">
-          <span className="text-sm font-bold">{peso(product.minPrice)}</span>
-          {variant?.compareAtPrice && <span className="text-xs text-muted-foreground line-through">{peso(variant.compareAtPrice)}</span>}
+          <span className="text-sm font-bold">{USD(product.minPrice)}</span>
+          {variant?.compareAtPrice && <span className="text-xs text-muted-foreground line-through">{USD(variant.compareAtPrice)}</span>}
         </div>
         <div className="mt-2 flex gap-1.5">
           {colors.slice(0, 4).map((c) => (
@@ -113,7 +113,7 @@ export function ProductCard({ product }: { product: Product }) {
               />
             ))}
           </div>
-          <div className="mb-2 text-xs font-semibold">Select size (UK)</div>
+          <div className="mb-2 text-xs font-semibold">Select size (US)</div>
           <div className="grid grid-cols-6 gap-1">
             {availableSizes.map(v => (
               <button type="button"
@@ -122,7 +122,7 @@ export function ProductCard({ product }: { product: Product }) {
                 onClick={() => { 
                   setSelectedSize(v.size);
                   add({ productId: product.id, variantId: v.id, name: product.name, brand: product.brand, image: product.images[0],  quantity: 1, priceAtAdd: v.price, size: v.size, color: v.color.name });
-                  toast.success(`Added ${product.name} ${v.color.name} UK ${v.size} to cart`);
+                  toast.success(`Added ${product.name} ${v.color.name} US ${v.size} to cart`);
                   setPicker(false);
                 }}
                 className="rounded-md border border-border py-1.5 text-xs hover:border-gold hover:bg-gold/10"

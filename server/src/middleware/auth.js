@@ -24,9 +24,27 @@ async function authenticate(req, res, next) {
   }
 }
 
+async function authenticateOptional(req, res, next) {
+  try {
+    const token = req.headers.authorization?.replace(/^Bearer /, "") || req.cookies?.access;
+    if (!token) {
+      req.user = null;
+      return next();
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.sub).select("-passwordHash");
+    req.user = user || null;
+    next();
+  } catch (e) {
+    req.user = null;
+    next();
+  }
+}
+
 function requireAdmin(req, res, next) {
   if (req.user?.role !== "admin") return res.status(403).json({ error: "Admin only" });
   next();
 }
 
-module.exports = { sign, authenticate, requireAdmin };
+module.exports = { sign, authenticate, authenticateOptional, requireAdmin };
