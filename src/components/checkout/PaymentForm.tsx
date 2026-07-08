@@ -1,34 +1,34 @@
 import { useEffect, useState } from 'react';
-import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
+import { CheckoutElementsProvider, PaymentElement, useCheckoutElements } from '@stripe/react-stripe-js/checkout';
 import { toast } from 'sonner';
 import { getStripePromise } from '@/lib/stripe';
 
 interface PaymentFormProps {
   clientSecret: string;
-  onSuccess: (paymentIntentId: string) => void;
+  orderId?: string | null;
+  onSuccess: (confirmationId: string) => void;
   onError: (message: string) => void;
 }
 
-function CheckoutForm({ clientSecret, onSuccess, onError }: PaymentFormProps) {
-  const stripe = useStripe();
-  const elements = useElements();
+function CheckoutForm({ orderId, onSuccess, onError }: Omit<PaymentFormProps, 'clientSecret'>) {
+  const checkoutResult = useCheckoutElements();
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!stripe || !elements) {
+    if (checkoutResult.type !== 'success') {
       return;
     }
 
+    const checkout = checkoutResult.checkout as {
+      confirm: (options?: { returnUrl?: string }) => Promise<{ error?: { message?: string } }>;
+    };
+
     setSubmitting(true);
 
-    const { error, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/order/success`,
-      },
-      redirect: 'if_required',
+    const { error } = await checkout.confirm({
+      returnUrl: `${window.location.origin}/order/success?id=${encodeURIComponent(orderId || '')}`,
     });
 
     if (error) {
@@ -38,13 +38,8 @@ function CheckoutForm({ clientSecret, onSuccess, onError }: PaymentFormProps) {
       return;
     }
 
-    if (paymentIntent?.status === 'succeeded') {
-      onSuccess(paymentIntent.id);
-      toast.success('Payment completed successfully.');
-    } else {
-      onError('Your payment is still processing. Please check your order status.');
-    }
-
+    onSuccess('checkout-session');
+    toast.success('Payment is being processed.');
     setSubmitting(false);
   };
 
@@ -53,7 +48,7 @@ function CheckoutForm({ clientSecret, onSuccess, onError }: PaymentFormProps) {
       <PaymentElement />
       <button
         type="submit"
-        disabled={!stripe || submitting}
+        disabled={submitting || checkoutResult.type !== 'success'}
         className="w-full rounded-full bg-gold py-3.5 text-sm font-bold uppercase tracking-wider text-gold-foreground disabled:opacity-60"
       >
         {submitting ? 'Processing...' : 'Pay now'}
@@ -62,7 +57,7 @@ function CheckoutForm({ clientSecret, onSuccess, onError }: PaymentFormProps) {
   );
 }
 
-export function PaymentForm({ clientSecret, onSuccess, onError }: PaymentFormProps) {
+export function PaymentForm({ clientSecret, orderId, onSuccess, onError }: PaymentFormProps) {
   const [stripePromise, setStripePromise] = useState<Promise<any> | null>(null);
 
   useEffect(() => {
@@ -75,9 +70,9 @@ export function PaymentForm({ clientSecret, onSuccess, onError }: PaymentFormPro
 
   return (
     <div className="rounded-xl border border-border p-4">
-      <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe' } }}>
-        <CheckoutForm clientSecret={clientSecret} onSuccess={onSuccess} onError={onError} />
-      </Elements>
+      <CheckoutElementsProvider stripe={stripePromise} options={{ clientSecret, elementsOptions: { appearance: { theme: 'stripe' } } } as any}>
+        <CheckoutForm orderId={orderId} onSuccess={onSuccess} onError={onError} />
+      </CheckoutElementsProvider>
     </div>
   );
 }

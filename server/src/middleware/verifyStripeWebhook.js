@@ -1,4 +1,6 @@
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: process.env.STRIPE_API_VERSION || "2026-03-25.dahlia",
+});
 
 function verifyStripeWebhook(req, res, next) {
   const signature = req.headers["stripe-signature"];

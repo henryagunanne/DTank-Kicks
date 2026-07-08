@@ -65,7 +65,7 @@ export async function fetchOrders(token: string): Promise<any[]> {
 }
 
 
-// Create a new order with the given details and return the created order object
+// Legacy API for creating an order. This is now handled by the Stripe checkout session, but this endpoint is kept for backward compatibility.
 export async function createOrder(orderData: CreateOrderPayload, token?: string): Promise<any> {
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };

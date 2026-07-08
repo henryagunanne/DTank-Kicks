@@ -25,7 +25,7 @@ function TrackingPage() {
     // Require login to fetch by ID
     if (!user) {
       setLoading(false);
-      setError("You must be signed in to view orders by ID. Use the Track tab to track your order");
+      setError("Check your email for your tracking token then use the Track tab to track your order");
       return;
     }
 

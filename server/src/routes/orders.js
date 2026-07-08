@@ -1,7 +1,9 @@
 const crypto = require("crypto");
 const router = require("express").Router();
 const { body } = require("express-validator");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: process.env.STRIPE_API_VERSION || "2026-03-25.dahlia",
+});
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const { authenticate, requireAdmin } = require("../middleware/auth");
@@ -22,7 +24,7 @@ async function generateUniqueTrackingToken() {
   return token;
 }
 
-// POST /api/orders - creates a new order. If the user is authenticated, associate the order with their account. If not, allow guest checkout with email. Send an order confirmation email to the user after successful creation.
+// POST /api/orders - Legacy endpoint for creating an order. This is now handled by the Stripe checkout session, but this endpoint is kept for backward compatibility.
 router.post("/",
   body("items").isArray({ min: 1 }),
   body("shippingAddress.name").notEmpty(),
@@ -164,6 +166,7 @@ router.get("/track/:token", async (req, res) => {
 });
 
 
+
 async function updateOrderStatus(req, res) {
   try {
     const currentOrder = await Order.findById(req.params.id);
@@ -210,12 +213,15 @@ router.patch("/:id/status", authenticate, requireAdmin,
   updateOrderStatus
 );
 
+// PUT /api/orders/:id/status - updates the fulfillment status of an order. Admins can update any order.
 router.put("/:id/status", authenticate, requireAdmin,
   body("status").isIn(["pending", "processing payment", "paid", "packing", "shipped", "delivered", "cancelled", "refunded", "payment failed"]),
   validate,
   updateOrderStatus
 );
 
+
+// POST /api/orders/:id/refund - allows an admin to refund an order. This should update the order's payment status to "refunded" and the fulfillment status to "cancelled". It should also trigger a refund through Stripe if the order was paid via Stripe.
 router.post("/:id/refund", authenticate, requireAdmin, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);

@@ -6,6 +6,20 @@ const paymentController = require("../controllers/payment.controller");
 const { verifyStripeWebhook } = require("../middleware/verifyStripeWebhook");
 
 router.post(
+  "/create-checkout-session",
+  authenticateOptional,
+  body("shippingAddress.name").notEmpty(),
+  body("shippingAddress.email").isEmail(),
+  body("shippingAddress.line1").notEmpty(),
+  body("shippingAddress.city").notEmpty(),
+  body("shippingAddress.province").notEmpty(),
+  body("shippingAddress.country").notEmpty(),
+  body("deliveryMethod").optional().isIn(["standard", "express"]),
+  validate,
+  paymentController.createCheckoutSession
+);
+
+router.post(
   "/create-payment-intent",
   authenticateOptional,
   body("shippingAddress.name").notEmpty(),
@@ -16,7 +30,7 @@ router.post(
   body("shippingAddress.country").notEmpty(),
   body("deliveryMethod").optional().isIn(["standard", "express"]),
   validate,
-  paymentController.createPaymentIntent
+  paymentController.createCheckoutSession
 );
 
 router.post(

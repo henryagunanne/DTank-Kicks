@@ -48,7 +48,7 @@ router.get("/",
       filter.variants = { $elemMatch: { size: Number(size), stock: { $gt: 0 } } };
     } else if (color) {
       filter["variants.color.name"] = color;
-    }
+    } 
 
     // Price range filter on variants
     if (minPrice || maxPrice) {

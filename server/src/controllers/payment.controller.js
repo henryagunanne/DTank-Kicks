@@ -1,8 +1,8 @@
 const stripeService = require("../services/stripe.service");
 
-async function createPaymentIntent(req, res, next) {
+async function createCheckoutSession(req, res, next) {
   try {
-    const payload = await stripeService.createPaymentIntent({
+    const payload = await stripeService.createCheckoutSession({
       user: req.user,
       shippingAddress: req.body.shippingAddress,
       deliveryMethod: req.body.deliveryMethod,
@@ -16,6 +16,8 @@ async function createPaymentIntent(req, res, next) {
   }
 }
 
+const createPaymentIntent = createCheckoutSession;
+
 async function webhook(req, res, next) {
   try {
     const signature = req.headers["stripe-signature"];
@@ -26,4 +28,4 @@ async function webhook(req, res, next) {
   }
 }
 
-module.exports = { createPaymentIntent, webhook };
+module.exports = { createPaymentIntent, createCheckoutSession, webhook };

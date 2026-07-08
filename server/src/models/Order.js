@@ -121,6 +121,9 @@ const OrderSchema = new mongoose.Schema({
   paymentIntentId: {
     type: String,
   },
+  stripePaymentIntentId: {
+    type: String,
+  },
   paymentMethod: {
     type: String,
   },

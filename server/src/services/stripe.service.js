@@ -1,5 +1,7 @@
 const crypto = require("crypto");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: process.env.STRIPE_API_VERSION || "2026-03-25.dahlia",
+});
 const Cart = require("../models/Cart");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
@@ -147,7 +149,7 @@ async function validateCartItems(userId, selectedItemIds = [], selectedItems = [
   return { cart, cartItems, orderItems, subtotal };
 }
 
-async function createPaymentIntent({ user, shippingAddress, deliveryMethod, discount = 0, selectedItemIds = [], selectedItems = [] }) {
+async function createCheckoutSession({ user, shippingAddress, deliveryMethod, discount = 0, selectedItemIds = [], selectedItems = [] }) {
   if (!process.env.STRIPE_SECRET_KEY) {
     const error = new Error("Stripe is not configured.");
     error.statusCode = 500;
@@ -179,25 +181,38 @@ async function createPaymentIntent({ user, shippingAddress, deliveryMethod, disc
   });
 
   try {
-    const intent = await stripe.paymentIntents.create({
-      amount: getAmountInCents(breakdown.total),
-      currency: DEFAULT_CURRENCY,
-      automatic_payment_methods: { enabled: true },
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      ui_mode: "elements",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: DEFAULT_CURRENCY,
+            product_data: {
+              name: `DTank Kicks order ${order._id}`,
+            },
+            unit_amount: getAmountInCents(breakdown.total),
+          },
+          quantity: 1,
+        },
+      ],
+      customer_email: shippingAddress?.email || undefined,
       metadata: {
         orderId: order._id.toString(),
-        userId: user._id.toString(),
+        userId: userId ? userId.toString() : "guest",
         trackingNumber,
       },
-      description: `DTank Kicks order ${order._id}`,
     });
 
-    order.paymentIntentId = intent.id;
-    order.stripePaymentIntentId = intent.id;
+    order.paymentIntentId = session.payment_intent || session.id;
+    order.stripePaymentIntentId = session.payment_intent || session.id;
     await order.save();
 
     return {
-      clientSecret: intent.client_secret,
-      paymentIntentId: intent.id,
+      clientSecret: session.client_secret,
+      sessionId: session.id,
+      paymentIntentId: session.payment_intent || session.id,
       orderId: order._id.toString(),
       trackingNumber,
       currency: DEFAULT_CURRENCY.toUpperCase(),
@@ -296,6 +311,35 @@ async function handleWebhook(body, signature) {
     process.env.STRIPE_WEBHOOK_SECRET
   );
 
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    const order = session.metadata?.orderId
+      ? await Order.findById(session.metadata.orderId)
+      : await Order.findOne({
+          $or: [{ paymentIntentId: session.payment_intent }, { stripePaymentIntentId: session.payment_intent }],
+        });
+
+    if (!order) {
+      return { received: true, ignored: true };
+    }
+
+    if (order.paymentStatus === "paid") {
+      return { received: true, ignored: true };
+    }
+
+    try {
+      order.paymentIntentId = session.payment_intent || order.paymentIntentId;
+      order.stripePaymentIntentId = session.payment_intent || order.stripePaymentIntentId;
+      await order.save();
+      await finalizeSuccessfulOrder(order, session, null);
+      return { received: true, handled: true };
+    } catch (error) {
+      console.error("Stripe webhook payment success handling failed", error);
+      await markOrderFailed(order);
+      return { received: true, handled: false, error: error.message };
+    }
+  }
+
   if (event.type === "payment_intent.succeeded") {
     const paymentIntent = event.data.object;
     const order = await Order.findOne({
@@ -355,7 +399,8 @@ async function handleWebhook(body, signature) {
 }
 
 module.exports = {
-  createPaymentIntent,
+  createCheckoutSession,
+  createPaymentIntent: createCheckoutSession,
   handleWebhook,
   clearUserCart,
 };

@@ -73,7 +73,7 @@ function CheckoutPage() {
         headers.Authorization = `Bearer ${accessToken}`;
       }
 
-      const res = await fetch(`${API_BASE}/api/payments/create-payment-intent`, {
+      const res = await fetch(`${API_BASE}/api/payments/create-checkout-session`, {
         method: "POST",
         credentials: "include",
         headers,
@@ -218,6 +218,7 @@ function CheckoutPage() {
                 {clientSecret && (
                   <PaymentForm
                     clientSecret={clientSecret}
+                    orderId={orderId}
                     onSuccess={handlePaymentSuccess}
                     onError={(message) => setPaymentError(message)}
                   />
