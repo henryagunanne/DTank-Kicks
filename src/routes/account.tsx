@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { fetchOrders, cancelOrder } from "@/lib/order-api";
 import { fetchWishlist } from "@/lib/product-api";
+import { reorderItems } from "@/lib/reorder";
 
 import { WishlistableCard } from "@/components/site/ProductCard";
 
@@ -289,22 +290,7 @@ function AccountPage() {
 
                             {(o.fulfillmentStatus === "delivered" || o.fulfillmentStatus === "cancelled") && (
                               <button
-                                onClick={() => {
-                                  o.items?.forEach((item: any) => {
-                                    add({
-                                      productId: item.productId,
-                                      variantId: item.variantId,
-                                      name: item.name,
-                                      brand: item.brand,
-                                      image: item.image,
-                                      quantity: item.quantity,
-                                      priceAtAdd: (item.priceAtAdd ?? item.price) || 0,
-                                      size: item.size,
-                                      color: item.color,
-                                    });
-                                  });
-                                  toast.success("Order items added to cart.");
-                                }}
+                                onClick={() => reorderItems(o, add)}
                                 className="mt-4 rounded-full bg-gold px-4 py-2 text-xs font-semibold text-gold-foreground transition hover:bg-gold/90"
                               >
                                 Reorder

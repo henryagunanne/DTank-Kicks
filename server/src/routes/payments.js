@@ -19,6 +19,7 @@ router.post(
   paymentController.createCheckoutSession
 );
 
+
 router.post(
   "/create-payment-intent",
   authenticateOptional,
@@ -30,9 +31,11 @@ router.post(
   body("shippingAddress.country").notEmpty(),
   body("deliveryMethod").optional().isIn(["standard", "express"]),
   validate,
-  paymentController.createCheckoutSession
+  paymentController.createPaymentIntent
 );
 
+
+// Stripe webhook endpoint
 router.post(
   "/webhook",
   verifyStripeWebhook,

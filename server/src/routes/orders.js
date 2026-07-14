@@ -6,6 +6,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY, {
 });
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const orderController = require("../controllers/order.controller");
 const { authenticate, requireAdmin } = require("../middleware/auth");
 const { validate } = require("../middleware/error");
 const { sendEmail } = require("../utils/email");
@@ -250,89 +251,9 @@ router.post("/:id/refund", authenticate, requireAdmin, async (req, res) => {
 
 // POST /api/orders/:id/cancel - allows a user to cancel their order if it hasn't been shipped yet. 
 // This should update the order's fulfillment status to "cancelled" and restore the stock for the cancelled items.
-router.post("/:id/cancel", authenticate, async (req, res, next) => {
-  try {
-    const order = await Order.findById(req.params.id);
+router.post("/:id/cancel", authenticate, orderController.cancelOrder);
 
-    if (!order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    // prevent cancel if already shipped/delivered
-    if (["shipped", "delivered"].includes(order.status)) {
-      return res.status(400).json({
-        error: "Order cannot be cancelled after it has been shipped"
-      });
-    }
-
-    // prevent double cancellation
-    if (order.status === "cancelled") {
-      return res.status(400).json({
-        error: "Order is already cancelled"
-      });
-    }
-
-    // RESTORE STOCK
-    for (const item of order.items) {
-      const productInventory = await Product.updateOne(
-        {
-          _id: item.product,
-          "variants._id": item.variantId
-        },
-        {
-          $inc: {
-            "variants.$.stock": item.quantity
-          }
-        }
-      );
-
-      if (productInventory.modifiedCount === 0) {
-        console.warn(`Failed to restore stock for product ${item.product}, variant ${item.variantId}`);
-      }
-    }
-
-    // update order status
-    const updatedOrder = await Order.updateOne(
-      { _id: req.params.id },
-      {
-        $set: {
-          fulfillmentStatus: "cancelled",
-        }
-      }
-    );
-
-    if (updatedOrder.modifiedCount === 0) {
-      console.warn(`Failed to update order status to cancelled for order ${req.params.id}`);
-    }
-
-    // Alternatively, we could fetch the order again after updating to return the latest data:
-    const cancelledOrder = await Order.findById(req.params.id);
-
-     // send cancellation email to user
-     if (cancelledOrder.shippingAddress?.email) {
-      await sendEmail({
-        to: cancelledOrder.shippingAddress.email,
-        subject: `Order Cancellation - ${cancelledOrder._id}`,
-        text: `<h2>Your order has been cancelled</h2><p>Your order ID is ${cancelledOrder._id}. If you have any questions, please contact our support.</p>`,
-      });
-    }
-
-    // Note: We could also choose to delete the order instead of marking it as cancelled, depending on business requirements. 
-    // However, keeping a record of cancelled orders can be useful for analytics and customer service.
-
-    //order.status = "cancelled";
-    //order.cancelledAt = new Date();
-
-    //await order.save();
-
-    res.json({
-      message: "Order cancelled successfully",
-      order: cancelledOrder
-    });
-
-  } catch (err) {
-    next(err);
-  }
-});
+// 
+router.patch("/guest/:token/cancel", orderController.cancelGuestOrder);
 
 module.exports = router;

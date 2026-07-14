@@ -27,6 +27,7 @@ function buildBreakdown({ subtotal, deliveryMethod, discount }) {
   };
 }
 
+
 async function generateUniqueTrackingToken() {
   let token;
   let existingOrder;
@@ -38,6 +39,7 @@ async function generateUniqueTrackingToken() {
 
   return token;
 }
+
 
 function toOrderItem(item, variant, product) {
   return {
@@ -52,6 +54,7 @@ function toOrderItem(item, variant, product) {
     price: Number(variant.price),
   };
 }
+
 
 async function validateCartItems(userId, selectedItemIds = [], selectedItems = []) {
   const checkoutItems = Array.isArray(selectedItems) && selectedItems.length
@@ -149,6 +152,7 @@ async function validateCartItems(userId, selectedItemIds = [], selectedItems = [
   return { cart, cartItems, orderItems, subtotal };
 }
 
+
 async function createCheckoutSession({ user, shippingAddress, deliveryMethod, discount = 0, selectedItemIds = [], selectedItems = [] }) {
   if (!process.env.STRIPE_SECRET_KEY) {
     const error = new Error("Stripe is not configured.");
@@ -241,13 +245,17 @@ async function decrementInventory(order) {
     const result = await Product.updateOne(
       {
         _id: item.product,
-        "variants._id": item.variantId,
-        "variants.stock": { $gte: item.quantity },
+        "variants": {
+          $elemMatch: {
+            _id: item.variantId,
+            stock: { $gte: item.quantity }
+          }
+        }
       },
       {
         $inc: {
-          "variants.$.stock": -item.quantity,
-        },
+          "variants.$.stock": -item.quantity
+        }
       }
     );
 
@@ -290,6 +298,7 @@ async function finalizeSuccessfulOrder(order, paymentIntent, receiptUrl) {
   return order;
 }
 
+
 async function markOrderFailed(order, status = "payment failed") {
   order.paymentStatus = "failed";
   order.status = status;
@@ -297,6 +306,7 @@ async function markOrderFailed(order, status = "payment failed") {
   await order.save();
   return order;
 }
+
 
 async function handleWebhook(body, signature) {
   if (!process.env.STRIPE_WEBHOOK_SECRET) {

@@ -28,12 +28,12 @@ function CheckoutPage() {
   const [name, setName] = useState(primaryAddress?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [phone, setPhone] = useState(primaryAddress?.phone || "");
-
   const [address, setAddress] = useState(primaryAddress?.line1 || "");
   const [city, setCity] = useState(primaryAddress?.city || "");
   const [province, setProvince] = useState(primaryAddress?.province || "");
   const [postalCode, setPostalCode] = useState(primaryAddress?.postalCode || "");
   const [country, setCountry] = useState(primaryAddress?.country || "Philippines");
+
 
   // const discount = useCart().discount; // Get the discount from the cart context
   const [delivery, setDelivery] = useState<"std" | "exp">("std");
@@ -49,6 +49,30 @@ function CheckoutPage() {
   const shipFee = delivery === "exp" ? 350 : subtotal >= 2000 ? 0 : 150;
   const tax = Math.round(subtotal * 0.12);
   const total = subtotal + shipFee + tax;
+
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  const shippingErrors = {
+    name: !name.trim() ? "Full name is required." : "",
+    email: !email.trim()
+      ? "Email is required."
+      : !emailRegex.test(email)
+        ? "Enter a valid email address."
+        : "",
+    phone: !phone.trim() ? "Phone number is required." : "",
+    address: !address.trim() ? "Address is required." : "",
+    city: !city.trim() ? "City is required." : "",
+    province: !province.trim() ? "Province is required." : "",
+    postalCode: !postalCode.trim() ? "Postal code is required." : "",
+    country: !country.trim() ? "Country is required." : "",
+  };
+
+  const isShippingValid = Object.values(shippingErrors).every(
+    (error) => error === ""
+  );
+
+  const [showValidation, setShowValidation] = useState(false);
 
   if (selectedCartItems.length === 0) {
     return (
@@ -131,6 +155,13 @@ function CheckoutPage() {
   const placeOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    setShowValidation(true);
+
+    if (!isShippingValid) {
+      toast.error("Please complete all required shipping information.");
+      return;
+    }
+
     if (payment === "paypal") {
       toast.error("PayPal is not enabled for this checkout flow yet.");
       return;
@@ -180,14 +211,14 @@ function CheckoutPage() {
           <section className="rounded-xl border border-border p-6">
             <h2 className="text-lg font-bold">1. Contact & Shipping</h2>
             <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} required />
-              <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              <Input label="Phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required />
-              <Input label="Country" value={country} onChange={(e) => setCountry(e.target.value)} required />
-              <div className="sm:col-span-2"><Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} required /></div>
-              <Input label="City" value={city} onChange={(e) => setCity(e.target.value)} required />
-              <Input label="Province" value={province} onChange={(e) => setProvince(e.target.value)} required />
-              <Input label="Postal code" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} required />
+              <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} error={showValidation ? shippingErrors.name : ""} required />
+              <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={showValidation ? shippingErrors.email : ""} required />
+              <Input label="Phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} error={showValidation ? shippingErrors.phone : ""} required />
+              <Input label="Country" value={country} onChange={(e) => setCountry(e.target.value)} error={showValidation ? shippingErrors.country : ""} required />
+              <div className="sm:col-span-2"><Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} error={showValidation ? shippingErrors.address : ""} required /></div>
+              <Input label="City" value={city} onChange={(e) => setCity(e.target.value)} error={showValidation ? shippingErrors.city : ""} required />
+              <Input label="Province" value={province} onChange={(e) => setProvince(e.target.value)} error={showValidation ? shippingErrors.province : ""} required />
+              <Input label="Postal code" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} error={showValidation ? shippingErrors.postalCode : ""} required />
             </div>
           </section>
 
@@ -256,7 +287,7 @@ function CheckoutPage() {
             {discount > 0 && <div className="flex justify-between text-gold"><dt>Discount</dt><dd>-{USD(discount)}</dd></div>}
             <div className="flex justify-between border-t border-border pt-3 text-base font-bold"><dt>Total</dt><dd>{USD(total)}</dd></div>
           </dl>
-          <button type="button" onClick={() => placeOrder({ preventDefault: () => {} } as React.FormEvent)} disabled={submitting} className="mt-6 w-full rounded-full bg-gold py-3.5 text-sm font-bold uppercase tracking-wider text-gold-foreground disabled:opacity-60">
+          <button type="button" onClick={() => placeOrder({ preventDefault: () => {} } as React.FormEvent)} disabled={submitting || !isShippingValid} className="mt-6 w-full rounded-full bg-gold py-3.5 text-sm font-bold uppercase tracking-wider text-gold-foreground disabled:opacity-60">
             {submitting ? "Preparing payment..." : `Pay • ${USD(total)}`}
           </button>
         </aside>
@@ -265,11 +296,12 @@ function CheckoutPage() {
   );
 }
 
-function Input({ label, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+function Input({ label, error, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string, error?: string; }) {
   return (
     <label className="block">
       <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
-      <input {...props} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:border-gold" />
+      <input {...props} className={`h-11 w-full rounded-md border bg-background px-3 text-sm outline-non ${error ? "border-red-500 focus:border-red-500" : "border-input focus:border-gold"}`} />
+      {error && (<p className="mt-1 text-xs text-red-500"> {error}</p>)}
     </label>
   );
 }

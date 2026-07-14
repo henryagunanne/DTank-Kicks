@@ -110,6 +110,24 @@ export async function cancelOrder(orderId: string, token?: string): Promise<any>
   return res.json();
 }
 
+// Cancel a guest order by token — returns the updated order object with status "cancelled"
+export async function cancelGuestOrder(token: string) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+  const res = await fetch(`${API_BASE}/api/orders/guest/${token}/cancel`, {
+      method: "PATCH",
+      credentials: "include",
+      headers,
+    }
+  );
+
+  if (!res.ok) {
+      throw new Error("Unable to cancel order.");
+  }
+
+  return res.json();
+}
+
 
 // Track order using tracking token
 export async function trackOrder(trackingNumber: string): Promise<any> {

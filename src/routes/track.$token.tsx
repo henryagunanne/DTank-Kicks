@@ -2,7 +2,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Check, Package, Truck, Home } from 'lucide-react'
-import { trackOrder } from '@/lib/order-api'
+import { trackOrder, cancelGuestOrder } from '@/lib/order-api'
+import { useCart } from '@/lib/cart-context'
+import { reorderItems } from '@/lib/reorder'
 
 export const Route = createFileRoute('/track/$token')({
   component: TrackOrderPage,
@@ -10,11 +12,14 @@ export const Route = createFileRoute('/track/$token')({
 })
 
 function TrackOrderPage() {
+  const { add } = useCart();
   const { token } = Route.useParams()
   const [order, setOrder] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [cancelling, setCancelling] = useState(false)
 
+  // Fetch order details when the token changes
   useEffect(() => {
     if (!token) return
 
@@ -39,6 +44,25 @@ function TrackOrderPage() {
     { label: 'Shipped', value: 'shipped', icon: Truck },
     { label: 'Delivered', value: 'delivered', icon: Home },
   ]
+
+  // Handle order cancellation
+  const handleCancel = async () : Promise<any> => {
+    if (!confirm("Cancel this order?")) return;
+
+    try {
+      setCancelling(true);
+      const updated = await cancelGuestOrder(token);
+
+      setOrder(updated);
+      toast.success("Order cancelled.");
+      // reload the page
+      window.location.reload();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
@@ -149,6 +173,54 @@ function TrackOrderPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-border bg-background p-6">
+                <div className="mb-4 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Actions</div>
+                <div className="flex flex-wrap gap-3">
+                    {["placed", "processing"].includes(order.fulfillmentStatus) && (
+                        <button
+                            onClick={handleCancel}
+                            disabled={cancelling}
+                            className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                        >
+                            {cancelling
+                                ? "Cancelling..."
+                                : "Cancel Order"}
+                        </button>
+                    )}
+
+                    {["delivered", "cancelled"].includes(order.fulfillmentStatus) && (
+                        <button
+                            onClick={() => reorderItems(order, add)}
+                            className="rounded-md bg-gold px-4 py-2 text-sm font-semibold text-gold-foreground hover:bg-gold/90"
+                        >
+                            Reorder
+                        </button>
+                    )}
+
+                    {order.fulfillmentStatus === "delivered" && (
+                      <>
+                        <button
+                          onClick={() => {
+                            // TODO: Open return request modal/page
+                          }}
+                          className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100"
+                        >
+                          Request Return
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                // TODO
+                            }}
+                            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                        >
+                            Rate Products
+                        </button>
+                        </>
+                      )}
+                </div>
             </div>
           </div>
         </>
