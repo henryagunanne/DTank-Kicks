@@ -1,6 +1,6 @@
-# SoleStore Express API
+# D-Tank Kicks Express API
 
-Standalone Node/Express + MongoDB backend for the SoleStore frontend.
+Standalone Node/Express + MongoDB backend for the D-Tank Kicks frontend.
 
 ## Run locally
 
@@ -15,7 +15,7 @@ npm run dev            # starts on http://localhost:4000
 Then in the frontend, set `VITE_API_URL=http://localhost:4000` and rebuild.
 
 ## Admin login (after seed)
-- email: `admin@solestore.com`
+- email: `admin@dtank-kicks.com`
 - password: `Admin1234!`
 
 ## Endpoints
