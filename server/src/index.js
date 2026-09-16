@@ -21,6 +21,8 @@ const paymentRoutes = require("./routes/payments");
 const couponRoutes = require("./routes/coupons");
 const wishlistRoutes = require("./routes/wishlist");
 const adminRoutes = require("./routes/admin");
+const returnsRoutes = require("./routes/returns");
+const uploadsRoutes = require("./routes/uploads");
 
 const app = express();
 
@@ -44,6 +46,8 @@ app.use("/api/products", reviewRoutes); // nested /:id/reviews
 app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/returns", returnsRoutes);
+app.use("/api/uploads", uploadsRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/wishlist", wishlistRoutes);

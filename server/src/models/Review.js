@@ -20,7 +20,19 @@ const ReviewSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: true,
+    default: null,
+  },
+  guestName: {
+    type: String,
+    default: "",
+  },
+  guestEmail: {
+    type: String,
+    default: "",
+  },
+  orderId: {
+    type: String,
+    default: "",
   },
   rating: {
     type: Number,

@@ -5,7 +5,7 @@
 import type {CartItem} from "./types";
 
 // Determine API base URL from environment variable, with a fallback for server-side rendering
-const API_BASE = typeof window === "undefined" ? (import.meta as any).env?.VITE_API_URL || "http://localhost:4000" : "";
+const API_BASE = (import.meta as any).env?.VITE_API_URL || "http://localhost:4000";
 
 export interface OrderItem {
   product: string;
@@ -123,6 +123,75 @@ export async function cancelGuestOrder(token: string) {
 
   if (!res.ok) {
       throw new Error("Unable to cancel order.");
+  }
+
+  return res.json();
+}
+
+export async function requestReturn(
+  orderId: string,
+  payload: {
+    reason?: string;
+    email?: string;
+    items?: Array<{ orderItemIndex?: number; product?: string; productId?: string; variantId?: string; variant?: string; name?: string; quantity?: number; price?: number; reason?: string; condition?: string; images?: string[] }>;
+  },
+  token?: string,
+) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  // Normalize payload: server expects `customerNote` (and may also accept `email` and `items`).
+  const bodyPayload: any = { ...(payload || {}) };
+  if (bodyPayload.reason && !bodyPayload.customerNote) {
+    bodyPayload.customerNote = bodyPayload.reason;
+  }
+
+  const res = await fetch(`${API_BASE}/api/orders/${orderId}/return-request`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(bodyPayload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error || "Failed to request return");
+  }
+
+  return res.json();
+}
+
+export async function approveReturn(orderId: string, payload: { refundAmount?: number; adminNote?: string }, token: string) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/orders/${orderId}/return-approve`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to approve return");
+  }
+
+  return res.json();
+}
+
+export async function refundOrder(orderId: string, payload: { refundAmount?: number; adminNote?: string }, token: string) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/orders/${orderId}/refund`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to issue refund");
   }
 
   return res.json();

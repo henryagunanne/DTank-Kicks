@@ -149,4 +149,80 @@ export async function updateOrderStatus(orderId: string, status: string, token: 
   }
 }
 
+export async function approveReturnRequest(orderId: string, payload: { refundAmount?: number; adminNote?: string; items?: any[] }, token: string): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/orders/${orderId}/return-approve`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to approve return request");
+  }
+}
+
+
+export async function issueRefund(orderId: string, payload: { refundAmount?: number; adminNote?: string; items?: any[] }, token: string): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/orders/${orderId}/refund`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to issue refund");
+  }
+}
+
+export async function inspectReturn(returnId: string, payload: { inspection?: any; restock?: boolean }, token: string): Promise<any> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/returns/${returnId}/inspect`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error || "Failed to inspect return");
+  }
+
+  return res.json();
+}
+
+// Upload inspection photos (multipart/form-data). Returns array of uploaded file paths.
+export async function uploadInspectionPhotos(files: File[], token: string | null): Promise<string[]> {
+  const form = new FormData();
+  files.forEach((f) => form.append("photos", f));
+
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/uploads/returns`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: form,
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error || "Upload failed");
+  }
+
+  const data = await res.json();
+  return data.files || [];
+}
+
 

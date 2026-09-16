@@ -106,9 +106,26 @@ ProductSchema.index({
 ProductSchema.set("toJSON", {
   virtuals: true,
   versionKey: false,
-  transform: (_, ret) => {
-    ret.id = ret._id.toString();
-    delete ret._id;
+  transform: (doc, ret) => {
+    // Only modify root Product documents. Mongoose may call transform for
+    // subdocuments; guard against undefined _id and ensure toString exists.
+    const isRootProduct = doc && doc.constructor && doc.constructor.modelName === "Product";
+    if (!isRootProduct) return ret;
+
+    if (ret && ret._id != null) {
+      try {
+        // Ensure _id has a toString function before calling it
+        if (typeof ret._id.toString === "function") {
+          ret.id = ret._id.toString();
+        } else {
+          ret.id = String(ret._id);
+        }
+      } catch (e) {
+        ret.id = String(ret._id);
+      }
+      delete ret._id;
+    }
+    return ret;
   },
 });
 

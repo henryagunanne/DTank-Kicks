@@ -2,9 +2,11 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Check, Package, Truck, Home } from 'lucide-react'
-import { trackOrder, cancelGuestOrder } from '@/lib/order-api'
+import { trackOrder, cancelGuestOrder, requestReturn } from '@/lib/order-api'
+import { createReview } from '@/lib/product-api'
 import { useCart } from '@/lib/cart-context'
 import { reorderItems } from '@/lib/reorder'
+import { StarInput } from '@/components/site/StarInput'
 
 export const Route = createFileRoute('/track/$token')({
   component: TrackOrderPage,
@@ -18,6 +20,22 @@ function TrackOrderPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
+  const [returnReason, setReturnReason] = useState('')
+  const [returning, setReturning] = useState(false)
+  const [returnItems, setReturnItems] = useState<Record<string, boolean>>({})
+  const [reviewing, setReviewing] = useState(false)
+  const [reviewValues, setReviewValues] = useState<Record<string, { rating: number; title: string; body: string }>>({})
+  const [reviewImages, setReviewImages] = useState<Record<string, File[]>>({})
+
+  const getProductId = (item: any) => String(
+    item?.product?._id ?? item?.product?.id ?? item?.product ?? item?.productId ?? ""
+  )
+
+  const getItemKey = (item: any, fallback = 'item') => {
+    const productId = getProductId(item)
+    const variantId = item?.variantId || item?.variant || productId || fallback
+    return `${productId || fallback}-${variantId}`
+  }
 
   // Fetch order details when the token changes
   useEffect(() => {
@@ -55,13 +73,96 @@ function TrackOrderPage() {
 
       setOrder(updated);
       toast.success("Order cancelled.");
-      // reload the page
       window.location.reload();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
       setCancelling(false);
     }
+  };
+
+  const getReturnedItemKeys = (orderData: any) => {
+    const returnedKeys = new Set((orderData?.returnedItems || []).map((item: any) => getItemKey(item)))
+    const requestedKeys = new Set((orderData?.returnRequest?.returnItems || []).map((item: any) => getItemKey(item)))
+    return new Set([...returnedKeys, ...requestedKeys])
+  }
+
+  const getReturnListItems = (orderData: any) => {
+    const returnedKeys = getReturnedItemKeys(orderData)
+    return (orderData?.items || []).map((item: any, index: number) => ({
+      ...item,
+      itemKey: `${orderData?._id || orderData?.id || 'order'}-${getItemKey(item, String(index))}`,
+      wasReturned: returnedKeys.has(getItemKey(item)),
+    }))
+  }
+
+  const hasReturnHistory = (orderData: any) => {
+    return (Array.isArray(orderData?.returnedItems) && orderData.returnedItems.length > 0)
+      || (Array.isArray(orderData?.returnRequest?.returnItems) && orderData.returnRequest.returnItems.length > 0)
+  }
+
+  const handleReturnRequest = async () => {
+    if (!order) return;
+    const selectedItems = getReturnListItems(order)
+      .filter((item: any) => !item.wasReturned)
+      .filter((item: any) => !!returnItems[item.itemKey])
+      .map((item: any) => ({
+        product: getProductId(item),
+        variantId: item.variantId,
+        name: item.name,
+        quantity: item.quantity || 1,
+        price: Number(item.price || 0),
+      }));
+
+    if (!selectedItems.length) {
+      toast.error('Select at least one item to return.');
+      return;
+    }
+
+    try {
+      setReturning(true);
+      await requestReturn(order._id, {
+        reason: returnReason,
+        email: order.shippingAddress?.email || order.guestEmail,
+        items: selectedItems,
+      }, undefined);
+      setOrder({ ...order, status: 'return requested', fulfillmentStatus: 'return requested', returnRequest: { status: 'requested', reason: returnReason, returnItems: selectedItems } });
+      setReturnReason('');
+      setReturnItems({});
+      toast.success('Return request submitted.');
+    } catch (err: any) {
+      toast.error(err.message || 'Unable to request return');
+    } finally {
+      setReturning(false);
+    }
+  };
+
+  const handleReviewSubmit = async () => {
+    if (!order) return;
+    const items = order.items || [];
+    for (const item of items) {
+      const productId = getProductId(item);
+      if (!productId) continue;
+      const key = `${order._id}-${getItemKey(item, item.name || 'item')}`;
+      const review = reviewValues[key] || { rating: 5, title: `${item.name} review`, body: 'Great experience.' };
+      const title = (review.title || `${item.name} review`).trim();
+      const body = (review.body || 'Great experience.').trim();
+      const files = reviewImages[key] || [];
+      const formData = new FormData();
+      formData.append('product', productId);
+      formData.append('rating', String(review.rating));
+      formData.append('title', title || `${item.name} review`);
+      formData.append('body', body || 'Great experience.');
+      formData.append('guestEmail', order.shippingAddress?.email || order.guestEmail || '');
+      formData.append('guestName', order.shippingAddress?.name || 'Guest');
+      formData.append('orderId', order._id);
+      files.forEach((file) => formData.append('images', file));
+      await createReview(formData, undefined);
+    }
+    toast.success('Thank you for your review.');
+    setReviewing(false);
+    setReviewValues({});
+    setReviewImages({});
   };
 
   return (
@@ -199,33 +300,132 @@ function TrackOrderPage() {
                         </button>
                     )}
 
-                    {order.fulfillmentStatus === "delivered" && (
-                      <>
-                        <button
-                          onClick={() => {
-                            // TODO: Open return request modal/page
-                          }}
-                          className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100"
-                        >
-                          Request Return
-                        </button>
+                    {(order.fulfillmentStatus === "delivered" || order.fulfillmentStatus === "return requested" || order.fulfillmentStatus === "return approved" || order.paymentStatus === "pending_refund") && (() => {
+                      const deliveredAt = order.deliveredAt || order.updatedAt || order.createdAt;
+                      const isWithinReturnWindow = !deliveredAt || (Date.now() - new Date(deliveredAt).getTime()) <= 14 * 24 * 60 * 60 * 1000;
+                      const hasRemainingItems = getReturnListItems(order).some((item: any) => !item.wasReturned);
+                      const canRequestReturn = isWithinReturnWindow && (hasRemainingItems || hasReturnHistory(order));
 
-                        <button
-                            onClick={() => {
-                                // TODO
-                            }}
+                      return (
+                        <>
+                          {canRequestReturn ? (
+                            <button
+                              onClick={() => {
+                                setReturnItems({});
+                                setReviewing(false);
+                                setReturning(true);
+                              }}
+                              className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100"
+                            >
+                              Request Return
+                            </button>
+                          ) : (
+                            <div className="rounded-md border border-muted-foreground/20 bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Return window closed
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => setReviewing(true)}
                             className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
-                        >
+                          >
                             Rate Products
-                        </button>
+                          </button>
                         </>
-                      )}
+                      );
+                    })()}
                 </div>
             </div>
           </div>
         </>
       ) : (
         <div className="mt-10 rounded-2xl border border-border bg-background p-8 text-sm text-muted-foreground">No order details found.</div>
+      )}
+
+      {(returning || reviewing) && order && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => { setReturning(false); setReviewing(false); }}>
+          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-card p-6" onClick={(e) => e.stopPropagation()}>
+            {returning ? (
+              <>
+                <h3 className="text-lg font-bold">Request return</h3>
+                <div className="mt-4 space-y-3">
+                  {getReturnListItems(order).map((item: any) => {
+                    const key = item.itemKey;
+                    const checked = !!returnItems[key];
+                    if (item.wasReturned) {
+                      return (
+                        <div key={key} className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-3 opacity-80">
+                          <div className="flex items-center gap-3">
+                            <div className="h-4 w-4 rounded-sm border border-muted-foreground/40 bg-muted" />
+                            <div>
+                              <div className="font-medium">{item.name}</div>
+                              <div className="text-xs text-muted-foreground">{item.color} • Size {item.size}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Returned</span>
+                            <div className="text-sm font-semibold text-muted-foreground">{item.price ? `$${item.price}` : '—'}</div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <label key={key} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                        <div className="flex items-center gap-3">
+                          <input type="checkbox" checked={checked} onChange={() => setReturnItems((prev) => ({ ...prev, [key]: !prev[key] }))} className="h-4 w-4" />
+                          <div>
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-xs text-muted-foreground">{item.color} • Size {item.size}</div>
+                          </div>
+                        </div>
+                        <div className="text-sm font-semibold">{item.price ? `$${item.price}` : '—'}</div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <textarea value={returnReason} onChange={(e) => setReturnReason(e.target.value)} rows={5} className="mt-4 w-full rounded-md border border-input bg-background p-3 text-sm" placeholder="Describe the issue" />
+                <div className="mt-4 flex justify-end gap-2">
+                  <button onClick={() => { setReturning(false); setReturnItems({}); }} className="rounded-md border border-border px-4 py-2 text-sm">Cancel</button>
+                  <button onClick={handleReturnRequest} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Submit</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-bold">Rate this order</h3>
+                <div className="mt-4 space-y-4">
+                  {(order.items || []).map((item: any, index: number) => {
+                    const key = `${order._id || 'order'}-${getItemKey(item, String(index))}`;
+                    const value = reviewValues[key] || { rating: 5, title: `${item.name} review`, body: '' };
+                    return (
+                      <div key={key} className="rounded-lg border border-border p-4">
+                        <div className="font-medium">{item.name}</div>
+                        <div className="mt-2"><StarInput value={value.rating} onChange={(rating) => setReviewValues((prev) => ({ ...prev, [key]: { ...value, rating } }))} /></div>
+                        <input value={value.title} onChange={(e) => setReviewValues((prev) => ({ ...prev, [key]: { ...value, title: e.target.value } }))} placeholder="Review title" className="mt-3 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" />
+                        <textarea value={value.body} onChange={(e) => setReviewValues((prev) => ({ ...prev, [key]: { ...value, body: e.target.value } }))} rows={3} placeholder="Tell us about your experience" className="mt-3 w-full rounded-md border border-input bg-background p-3 text-sm" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files ?? []);
+                            setReviewImages((prev) => ({ ...prev, [key]: files.slice(0, 4) }));
+                          }}
+                          aria-label={`Upload image for ${item.name}`}
+                          className="mt-3 text-xs"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button onClick={() => setReviewing(false)} className="rounded-md border border-border px-4 py-2 text-sm">Cancel</button>
+                  <button onClick={handleReviewSubmit} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Submit Reviews</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

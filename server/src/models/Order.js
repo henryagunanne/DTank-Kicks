@@ -102,21 +102,77 @@ const OrderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["pending", "processing payment", "paid", "packing", "shipped", "delivered", "cancelled", "refunded", "payment failed"],
+    enum: [
+      "pending",
+      "processing payment",
+      "paid",
+      "packing",
+      "shipped",
+      "delivered",
+      "cancelled",
+      "refunded",
+      "payment failed",
+      "return requested",
+      "return approved",
+      "return rejected",
+    ],
     default: "pending",
   },
 
   paymentStatus: {
     type: String,
-    enum: ["pending", "paid", "failed", "refunded"],
+    enum: ["pending", "paid", "failed", "pending_refund", "refunded"],
     default: "pending",
   },
   
   fulfillmentStatus: {
     type: String,
-    enum: ["placed", "processing", "shipped", "delivered", "cancelled"],
+    enum: ["placed", "processing", "shipped", "delivered", "cancelled", "return requested", "return approved"],
     default: "placed",
   },
+
+  returnRequest: {
+    requestedAt: { type: Date },
+    status: {
+      type: String,
+      enum: ["none", "requested", "approved", "rejected", "completed"],
+      default: "none",
+    },
+    reason: { type: String, default: "" },
+    refundAmount: { type: Number, default: 0 },
+    adminNote: { type: String, default: "" },
+    returnItems: [{
+      product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+      variantId: { type: String },
+      name: { type: String },
+      quantity: { type: Number, default: 1 },
+      price: { type: Number, default: 0 },
+    }],
+  },
+
+  returnedItems: [{
+    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+    variantId: { type: String },
+    name: { type: String },
+    quantity: { type: Number, default: 1 },
+    price: { type: Number, default: 0 },
+    refundedAt: { type: Date, default: Date.now },
+  }],
+
+  returnHistory: [{
+    requestedAt: { type: Date, default: Date.now },
+    status: { type: String },
+    reason: { type: String, default: "" },
+    refundAmount: { type: Number, default: 0 },
+    adminNote: { type: String, default: "" },
+    items: [{
+      product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+      variantId: { type: String },
+      name: { type: String },
+      quantity: { type: Number, default: 1 },
+      price: { type: Number, default: 0 },
+    }],
+  }],
 
   paymentIntentId: {
     type: String,

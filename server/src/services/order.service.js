@@ -55,6 +55,10 @@ exports.cancelOrder = async (order, { sendCancellationEmail = true } = {}) => {
 
     // Update order
     order.fulfillmentStatus = "cancelled";
+    order.status = order.status === "paid" ? "cancelled" : order.status;
+    if (order.paymentStatus === "paid") {
+      order.paymentStatus = "pending_refund";
+    }
     order.cancelledAt = new Date();
 
     await order.save();

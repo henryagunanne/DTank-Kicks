@@ -121,7 +121,7 @@ function ProductPage() {
       return `${API_BASE}${img}`;
     } else {
       return img;
-    }
+    }   
   };
 
   return (
@@ -255,7 +255,7 @@ function ProductPage() {
 
           <div className="mt-8 grid grid-cols-3 gap-4 rounded-xl border border-border p-4 text-xs">
             <div className="flex flex-col items-center gap-1 text-center"><Truck className="h-5 w-5 text-gold" /><div className="font-semibold">Free Shipping</div><div className="text-muted-foreground">over ₱2,000</div></div>
-            <div className="flex flex-col items-center gap-1 text-center"><RotateCcw className="h-5 w-5 text-gold" /><div className="font-semibold">30-day Returns</div><div className="text-muted-foreground">no questions</div></div>
+            <div className="flex flex-col items-center gap-1 text-center"><RotateCcw className="h-5 w-5 text-gold" /><div className="font-semibold">14-day Returns</div><div className="text-muted-foreground">no questions</div></div>
             <div className="flex flex-col items-center gap-1 text-center"><ShieldCheck className="h-5 w-5 text-gold" /><div className="font-semibold">Authentic</div><div className="text-muted-foreground">100% guarantee</div></div>
           </div>
         </div>
@@ -274,7 +274,7 @@ function ProductPage() {
         <div className="py-8 text-sm leading-7 text-muted-foreground max-w-3xl">
           {tab === "desc" && <p>{product.description}</p>}
           {tab === "size" && <p>This style fits true to size. If you're between sizes, we recommend going up half a size for a relaxed fit.</p>}
-          {tab === "ship" && <p>Standard shipping (3–5 days) is ₱150, free over ₱2,000. Express (1–2 days) is ₱350. Free returns within 30 days of delivery.</p>}
+          {tab === "ship" && <p>Standard shipping (3–5 days) is ₱150, free over ₱2,000. Express (1–2 days) is ₱350. Free returns within 14 days of delivery.</p>}
           {tab === "rev" && (
           <div className="space-y-8">
          

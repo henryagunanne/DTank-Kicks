@@ -7,9 +7,10 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY, {
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const orderController = require("../controllers/order.controller");
-const { authenticate, requireAdmin } = require("../middleware/auth");
+const { authenticate, authenticateOptional, requireAdmin } = require("../middleware/auth");
 const { validate } = require("../middleware/error");
 const { sendEmail } = require("../utils/email");
+const returnService = require("../services/return.service");
 
 
 // Helper function to generate order tracking token
@@ -174,21 +175,74 @@ async function updateOrderStatus(req, res) {
     if (!currentOrder) return res.status(404).json({ error: "Order not found" });
 
     const nextStatus = req.body.status;
-    const paymentStatus = ["paid", "refunded", "payment failed"].includes(nextStatus)
-      ? nextStatus
-      : currentOrder.paymentStatus;
-    const fulfillmentStatus = nextStatus === "shipped"
-      ? "shipped"
-      : nextStatus === "delivered"
-        ? "delivered"
-        : nextStatus === "cancelled"
-          ? "cancelled"
-          : "placed";
+    const allowedStatuses = [
+      "pending",
+      "processing payment",
+      "paid",
+      "packing",
+      "shipped",
+      "delivered",
+      "cancelled",
+      "refunded",
+      "payment failed",
+      "return requested",
+      "return approved",
+      "return rejected",
+    ];
+
+    if (!allowedStatuses.includes(nextStatus)) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
+
+    let paymentStatus = currentOrder.paymentStatus;
+    if (["paid", "refunded", "payment failed"].includes(nextStatus)) {
+      paymentStatus = nextStatus === "payment failed" ? "failed" : nextStatus;
+    }
+    if (nextStatus === "refunded") {
+      paymentStatus = "refunded";
+    }
+
+    let fulfillmentStatus = currentOrder.fulfillmentStatus;
+    if (["shipped", "delivered"].includes(nextStatus)) fulfillmentStatus = nextStatus;
+    if (["cancelled", "return requested", "return approved"].includes(nextStatus)) fulfillmentStatus = nextStatus;
+    if (nextStatus === "return rejected") fulfillmentStatus = "delivered";
 
     const order = await Order.findByIdAndUpdate(req.params.id, {
       status: nextStatus,
       paymentStatus,
       fulfillmentStatus,
+      ...(nextStatus === "return requested" ? {
+        returnRequest: {
+          ...currentOrder.returnRequest,
+          requestedAt: new Date(),
+          status: "requested",
+          reason: req.body.reason || currentOrder.returnRequest?.reason || "",
+          adminNote: req.body.adminNote || currentOrder.returnRequest?.adminNote || "",
+        },
+      } : {}),
+      ...(nextStatus === "return approved" ? {
+        returnRequest: {
+          ...currentOrder.returnRequest,
+          status: "approved",
+          adminNote: req.body.adminNote || currentOrder.returnRequest?.adminNote || "",
+          refundAmount: Number(req.body.refundAmount ?? currentOrder.returnRequest?.refundAmount ?? currentOrder.total ?? 0),
+        },
+      } : {}),
+      ...(nextStatus === "return rejected" ? {
+        returnRequest: {
+          ...currentOrder.returnRequest,
+          status: "rejected",
+          adminNote: req.body.adminNote || currentOrder.returnRequest?.adminNote || "",
+        },
+      } : {}),
+      ...(nextStatus === "refunded" ? {
+        paymentStatus: "refunded",
+        returnRequest: {
+          ...currentOrder.returnRequest,
+          status: "completed",
+          refundAmount: Number(req.body.refundAmount ?? currentOrder.returnRequest?.refundAmount ?? currentOrder.total ?? 0),
+        },
+      } : {}),
     }, { new: true });
 
     const recipientEmail = order.shippingAddress?.email || order.guestEmail;
@@ -209,14 +263,40 @@ async function updateOrderStatus(req, res) {
 
 // PATCH /api/orders/:id/status - updates the fulfillment status of an order. Admins can update any order.
 router.patch("/:id/status", authenticate, requireAdmin,
-  body("status").isIn(["pending", "processing payment", "paid", "packing", "shipped", "delivered", "cancelled", "refunded", "payment failed"]),
+  body("status").isIn([
+    "pending",
+    "processing payment",
+    "paid",
+    "packing",
+    "shipped",
+    "delivered",
+    "cancelled",
+    "refunded",
+    "payment failed",
+    "return requested",
+    "return approved",
+    "return rejected",
+  ]),
   validate,
   updateOrderStatus
 );
 
 // PUT /api/orders/:id/status - updates the fulfillment status of an order. Admins can update any order.
 router.put("/:id/status", authenticate, requireAdmin,
-  body("status").isIn(["pending", "processing payment", "paid", "packing", "shipped", "delivered", "cancelled", "refunded", "payment failed"]),
+  body("status").isIn([
+    "pending",
+    "processing payment",
+    "paid",
+    "packing",
+    "shipped",
+    "delivered",
+    "cancelled",
+    "refunded",
+    "payment failed",
+    "return requested",
+    "return approved",
+    "return rejected",
+  ]),
   validate,
   updateOrderStatus
 );
@@ -227,19 +307,65 @@ router.post("/:id/refund", authenticate, requireAdmin, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ error: "Order not found" });
-    if (!order.paymentIntentId && !order.stripePaymentIntentId) {
-      return res.status(400).json({ error: "No Stripe payment attached to this order" });
+
+    const refundAmount = Number(req.body.refundAmount ?? order.returnRequest?.refundAmount ?? order.total ?? 0);
+    const paymentIntents = [order.paymentIntentId, order.stripePaymentIntentId].filter(Boolean);
+
+    let refund = null;
+    if (paymentIntents.length > 0 && order.paymentStatus !== "refunded") {
+      refund = await stripe.refunds.create({
+        payment_intent: paymentIntents[0],
+        amount: Math.round(refundAmount * 100),
+        metadata: { orderId: order._id.toString() },
+      });
     }
 
-    const refund = await stripe.refunds.create({
-      payment_intent: order.paymentIntentId || order.stripePaymentIntentId,
-      metadata: { orderId: order._id.toString() },
-    });
+    const pendingApprovedItems = Array.isArray(order.returnRequest?.returnItems) && order.returnRequest.returnItems.length
+      ? order.returnRequest.returnItems
+      : (Array.isArray(order.returnedItems) ? order.returnedItems : []);
 
+    const mergedReturned = Array.isArray(order.returnedItems) ? [...order.returnedItems] : [];
+    for (const item of pendingApprovedItems) {
+      const key = `${String(item.product || "")}-${String(item.variantId || item.product || "")}`;
+      if (!mergedReturned.some((saved) => `${String(saved.product || "")}-${String(saved.variantId || saved.product || "")}` === key)) {
+        mergedReturned.push({
+          product: item.product,
+          variantId: item.variantId,
+          name: item.name,
+          quantity: item.quantity || 1,
+          price: item.price || 0,
+          refundedAt: new Date(),
+        });
+      }
+    }
+
+    order.returnedItems = mergedReturned;
     order.paymentStatus = "refunded";
     order.status = "refunded";
     order.fulfillmentStatus = "cancelled";
-    order.receiptUrl = order.receiptUrl || refund.id;
+    order.returnRequest = {
+      ...order.returnRequest,
+      status: "completed",
+      refundAmount,
+      adminNote: req.body.adminNote || order.returnRequest?.adminNote || "",
+      returnItems: Array.isArray(order.returnRequest?.returnItems) && order.returnRequest.returnItems.length
+        ? order.returnRequest.returnItems
+        : mergedReturned,
+    };
+    order.returnHistory = [
+      ...(Array.isArray(order.returnHistory) ? order.returnHistory : []),
+      {
+        requestedAt: order.returnRequest?.requestedAt || new Date(),
+        status: "completed",
+        reason: order.returnRequest?.reason || "",
+        refundAmount,
+        adminNote: req.body.adminNote || order.returnRequest?.adminNote || "",
+        items: Array.isArray(order.returnRequest?.returnItems) && order.returnRequest.returnItems.length
+          ? order.returnRequest.returnItems
+          : mergedReturned,
+      },
+    ];
+    order.receiptUrl = order.receiptUrl || refund?.id || order.receiptUrl;
     await order.save();
 
     res.json({ refund, order });
@@ -249,11 +375,96 @@ router.post("/:id/refund", authenticate, requireAdmin, async (req, res) => {
   }
 });
 
+router.post("/:id/return-request", authenticateOptional, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    const userMatches = req.user && order.user && order.user.toString() === req.user._id.toString();
+    const guestMatches = !req.user && (order.guestEmail === req.body.email || order.shippingAddress?.email === req.body.email);
+    if (!userMatches && !guestMatches && req.user?.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const { items = [], customerNote = "" } = req.body;
+    const result = await returnService.createReturnRequest({ orderId: req.params.id, userId: req.user?._id, items, customerNote });
+
+    res.json({ message: "Return requested", order: result.order, returnRequest: result.returnRequest });
+  } catch (error) {
+    console.error("Return request failed", error);
+    res.status(error.statusCode || 500).json({ error: error.message || "Failed to request return" });
+  }
+});
+
+router.post("/:id/return-approve", authenticate, requireAdmin, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    const requestedItems = Array.isArray(req.body.items) && req.body.items.length
+      ? req.body.items
+      : (Array.isArray(order.returnRequest?.returnItems) ? order.returnRequest.returnItems : []);
+
+    const normalizedItems = requestedItems.map((item) => ({
+      product: item.product || item.productId || null,
+      variantId: item.variantId || item.variant || null,
+      name: item.name || "Item",
+      quantity: Number(item.quantity || 1),
+      price: Number(item.price || 0),
+    })).filter((item) => item.product || item.name);
+
+    const existingReturned = Array.isArray(order.returnedItems) ? order.returnedItems : [];
+    const currentReturned = [...existingReturned];
+    for (const item of normalizedItems) {
+      const key = `${String(item.product || "")}-${String(item.variantId || item.product || "")}`;
+      if (!currentReturned.some((saved) => `${String(saved.product || "")}-${String(saved.variantId || saved.product || "")}` === key)) {
+        currentReturned.push({
+          product: item.product,
+          variantId: item.variantId,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          refundedAt: new Date(),
+        });
+      }
+    }
+
+    order.returnedItems = currentReturned;
+    order.returnRequest = {
+      ...order.returnRequest,
+      status: "approved",
+      adminNote: req.body.adminNote || order.returnRequest?.adminNote || "",
+      refundAmount: Number(req.body.refundAmount ?? order.returnRequest?.refundAmount ?? order.total ?? 0),
+      returnItems: normalizedItems,
+    };
+    order.returnHistory = [
+      ...(Array.isArray(order.returnHistory) ? order.returnHistory : []),
+      {
+        requestedAt: order.returnRequest?.requestedAt || new Date(),
+        status: "approved",
+        reason: order.returnRequest?.reason || "",
+        refundAmount: Number(req.body.refundAmount ?? order.returnRequest?.refundAmount ?? order.total ?? 0),
+        adminNote: req.body.adminNote || order.returnRequest?.adminNote || "",
+        items: normalizedItems,
+      },
+    ];
+    order.status = "return approved";
+    order.fulfillmentStatus = "return approved";
+    order.paymentStatus = order.paymentStatus === "paid" ? "pending_refund" : order.paymentStatus;
+    await order.save();
+
+    res.json({ message: "Return approved", order });
+  } catch (error) {
+    console.error("Approve return failed", error);
+    res.status(500).json({ error: "Failed to approve return" });
+  }
+});
+
 // POST /api/orders/:id/cancel - allows a user to cancel their order if it hasn't been shipped yet. 
 // This should update the order's fulfillment status to "cancelled" and restore the stock for the cancelled items.
 router.post("/:id/cancel", authenticate, orderController.cancelOrder);
 
-// 
+// POST /api/orders/guest/:token/cancel - allows a guest user to cancel their order if it hasn't been shipped yet.
 router.patch("/guest/:token/cancel", orderController.cancelGuestOrder);
 
 module.exports = router;

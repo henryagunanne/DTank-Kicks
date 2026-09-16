@@ -405,6 +405,80 @@ async function handleWebhook(body, signature) {
     return { received: true, handled: true };
   }
 
+  // Refund events handling - keep Refund documents and ReturnRequests in sync
+  if (event.type && event.type.startsWith("refund")) {
+    const refundObj = event.data.object;
+    const RefundModel = require("../models/Refund");
+    const ReturnRequest = require("../models/ReturnRequest");
+
+    // Upsert Refund doc by stripeRefundId
+    try {
+      let refundDoc = await RefundModel.findOne({ stripeRefundId: refundObj.id });
+      if (!refundDoc) {
+        // Try to correlate by metadata if available
+        const orderId = refundObj.metadata?.orderId;
+        const returnRequestId = refundObj.metadata?.returnRequestId;
+        refundDoc = await RefundModel.create({
+          stripeRefundId: refundObj.id,
+          paymentIntentId: refundObj.payment_intent,
+          orderId: orderId || undefined,
+          returnRequestId: returnRequestId || undefined,
+          amount: Math.round((refundObj.amount || 0) / 100),
+          currency: refundObj.currency,
+          status: refundObj.status,
+          stripeRaw: refundObj,
+        });
+      } else {
+        refundDoc.status = refundObj.status;
+        refundDoc.failureReason = refundObj.failure_reason || refundDoc.failureReason;
+        refundDoc.stripeRaw = refundObj;
+        await refundDoc.save();
+      }
+
+      // If refund succeeded, mark related order/returnRequest
+      if (refundObj.status === "succeeded") {
+        if (refundDoc.orderId) {
+          const order = await Order.findById(refundDoc.orderId);
+          if (order) {
+            order.paymentStatus = "refunded";
+            order.status = "refunded";
+            await order.save();
+          }
+        }
+
+        if (refundDoc.returnRequestId) {
+          const rr = await ReturnRequest.findById(refundDoc.returnRequestId);
+          if (rr) {
+            rr.refund = rr.refund || {};
+            rr.refund.refundAmount = refundDoc.amount;
+            rr.refund.currency = refundDoc.currency;
+            rr.refund.refundId = refundDoc._id;
+            rr.refund.status = "succeeded";
+            await rr.save();
+            // notify customer about refund
+            try {
+              const { sendEmail } = require("../utils/email");
+              const User = require("../models/User");
+              if (rr && rr.userId) {
+                const user = await User.findById(rr.userId).lean();
+                if (user && user.email) {
+                  sendEmail(user.email, "Your refund has been processed", `<p>Your refund of ${refundDoc.amount} ${refundDoc.currency} has been processed for return ${rr.returnNumber || rr._id}.</p>`);
+                }
+              } else if (order && order.guestEmail) {
+                sendEmail(order.guestEmail, "Your refund has been processed", `<p>Your refund of ${refundDoc.amount} ${refundDoc.currency} has been processed for return ${rr.returnNumber || rr._id}.</p>`);
+              }
+            } catch (e) { console.error("Failed to send refund email", e.message); }
+          }
+        }
+      }
+
+      return { received: true, handled: true };
+    } catch (err) {
+      console.error("Error syncing refund webhook", err);
+      return { received: true, handled: false, error: err.message };
+    }
+  }
+
   return { received: true, ignored: true };
 }
 

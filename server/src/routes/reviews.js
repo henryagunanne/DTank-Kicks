@@ -5,7 +5,7 @@ const { body } = require("express-validator");
 const Review = require("../models/Review");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
-const { authenticate, requireAdmin } = require("../middleware/auth");
+const { authenticate, authenticateOptional, requireAdmin } = require("../middleware/auth");
 const { validate } = require("../middleware/error");
 
 const upload = multer({
@@ -29,27 +29,46 @@ router.get("/:id/reviews", async (req, res) => {
 
 // POST /api/products/:id/reviews - allows an authenticated user to submit a review for a product. The user can only review a product if they have purchased it (verified by checking orders). The review includes a rating, title, body, and optional images. After submitting a review, the product's average rating should be recalculated.
 router.post("/:id/reviews",
-  authenticate, upload.array("images", 4),
+  authenticateOptional, upload.array("images", 4),
   body("rating").isInt({ min: 1, max: 5 }),
   body("title").trim().isLength({ min: 1, max: 100 }),
   body("body").trim().isLength({ min: 1, max: 1000 }),
   validate,
   async (req, res) => {
     try {
-      const verified = !!(await Order.findOne({ user: req.user._id, "items.product": req.params.id }));
+      const guestEmail = String(req.body.guestEmail || req.user?.email || "").trim();
+      const guestName = String(req.body.guestName || req.user?.name || "Guest").trim();
+      const orderId = String(req.body.orderId || "").trim();
+
+      let verified = false;
+      const order = await Order.findOne({
+        $or: [
+          { user: req.user?._id, "items.product": req.params.id },
+          { guestEmail, "items.product": req.params.id },
+          { _id: orderId, "items.product": req.params.id },
+        ],
+      }).lean();
+      verified = !!order;
+
+      if (!req.user && !guestEmail && !orderId) {
+        return res.status(400).json({ error: "Guest review requires order ID or email." });
+      }
+
       const images = (req.files || []).map((f) => `/uploads/reviews/${f.filename}`);
 
       const review = await Review.create({
-        product: req.params.id, 
-        user: req.user._id,
-        rating: Number(req.body.rating), 
-        title: req.body.title, 
+        product: req.params.id,
+        user: req.user?._id || null,
+        guestName,
+        guestEmail,
+        orderId,
+        rating: Number(req.body.rating),
+        title: req.body.title,
         body: req.body.body,
-        images, 
+        images,
         verifiedPurchase: verified,
       });
 
-      // refresh product rating
       const agg = await Review.aggregate([
         { $match: { product: review.product } },
         { $group: { _id: "$product", avg: { $avg: "$rating" }, count: { $sum: 1 } } },
